@@ -1,0 +1,42 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "profile": {
+          ".read": "auth != null"
+        },
+        "presence": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+
+    "messages": {
+      ".read": "auth != null",
+      ".indexOn": ["ts"],
+      "$msgId": {
+        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid || newData.child('seen').isBoolean() || newData.child('reactions').exists())",
+        ".validate": "newData.hasChildren(['uid','ts']) && newData.child('text').val().length <= 4000"
+      }
+    },
+
+    "typing": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "invites": {
+      "SPURANA-2024": {
+        ".read": "auth != null"
+      }
+    },
+
+    ".read":  false,
+    ".write": false
+  }
+}

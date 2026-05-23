@@ -24968,6 +24968,892 @@ button[onclick*="classList.remove"]{
     console.log('Spurana ✦ Watch Together Sync online — YouTube/HTML5 video, Firebase-synced play/pause/seek, drift correction every 3.5s.');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  LISTEN TOGETHER — synced music player                         ║
+     ║                                                                ║
+     ║  Like Watch Together, but for music — and built as a floating  ║
+     ║  mini-player so you can listen while chatting.                 ║
+     ║                                                                ║
+     ║  Sources supported:                                            ║
+     ║   · Spotify (track / album / playlist / episode)               ║
+     ║     → uses the official Spotify Iframe API for real sync       ║
+     ║   · YouTube Music / YouTube (any video, becomes audio)         ║
+     ║     → uses YouTube IFrame API                                  ║
+     ║   · Direct audio URLs (.mp3 .ogg .m4a .wav)                    ║
+     ║     → uses HTML5 <audio>                                       ║
+     ║   · SoundCloud → fallback iframe (no sync)                     ║
+     ║                                                                ║
+     ║  UI: a slim bar that slides down from the top of the chat      ║
+     ║  when active. Tap to expand for full controls + change track.  ║
+     ║  Minimizes to a small chip so chat stays in focus.             ║
+     ║                                                                ║
+     ║  Sync via Firebase shared/listen_session — same play/pause/    ║
+     ║  seek/track-change synchronization as Watch Together.          ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function ListenTogetherSync(){
+    'use strict';
+
+    const STATE_REF = 'shared/listen_session';
+
+    /* ═══════════════════════════════════════════════════════════════
+       1 · CSS — sleek floating bar (mobile-first)
+       ═══════════════════════════════════════════════════════════════ */
+    if(!document.getElementById('ltStyles')){
+      const s = document.createElement('style');
+      s.id = 'ltStyles';
+      s.textContent = `
+/* Slim bar at top of chat — appears below topbar when active */
+#ltBar{
+  position: fixed;
+  top: calc(env(safe-area-inset-top,0) + 70px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-130%);
+  width: calc(100vw - 24px);
+  max-width: 520px;
+  z-index: 700;
+  background: linear-gradient(135deg, rgba(20,8,28,.96), rgba(8,4,16,.94));
+  border: 1px solid rgba(232,0,154,.35);
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.55), 0 0 60px rgba(232,0,154,.15);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: transform .45s cubic-bezier(.2,.9,.3,1), opacity .35s;
+  opacity: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#ltBar.on{ transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+#ltBar.minimized{ transform: translateX(-50%) translateY(-200%); }
+
+/* Collapsed chip — small floating "now playing" indicator
+   when bar is minimized */
+#ltChip{
+  position: fixed;
+  top: calc(env(safe-area-inset-top,0) + 70px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-130%);
+  z-index: 699;
+  background: linear-gradient(135deg, rgba(20,8,28,.96), rgba(8,4,16,.94));
+  border: 1px solid rgba(232,0,154,.4);
+  border-radius: 999px;
+  padding: 8px 14px 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 6px 22px rgba(0,0,0,.5);
+  transition: transform .4s cubic-bezier(.2,.9,.3,1), opacity .3s;
+  opacity: 0;
+  pointer-events: none;
+  max-width: 280px;
+}
+#ltChip.on{ transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+#ltChip:hover, #ltChip:active{ transform: translateX(-50%) translateY(0) scale(1.04); }
+.lt-chip-icon{
+  width: 22px; height: 22px; border-radius: 50%;
+  background: linear-gradient(135deg, #E8009A, #8B0052);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  animation: ltSpin 4s linear infinite;
+}
+.lt-chip-icon.paused{ animation-play-state: paused; }
+@keyframes ltSpin{ from{transform:rotate(0)} to{transform:rotate(360deg)} }
+.lt-chip-title{
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 12px;
+  color: #F2EBF8;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+/* Bar contents */
+.lt-bar-head{
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px 8px;
+}
+.lt-bar-icon{
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg, #E8009A, #8B0052);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.lt-bar-info{ flex: 1; min-width: 0; }
+.lt-bar-title{
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 13px;
+  color: #F2EBF8;
+  letter-spacing: .03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+.lt-bar-status{
+  font-family: 'Orbitron', monospace;
+  font-size: 8.5px;
+  letter-spacing: .18em;
+  color: rgba(255,184,208,.7);
+  text-transform: uppercase;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lt-sync-dot{
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #00E5A0;
+  box-shadow: 0 0 6px #00E5A0;
+  animation: ltSyncPulse 1.6s ease-in-out infinite;
+}
+@keyframes ltSyncPulse{ 0%,100%{opacity:.4;transform:scale(.7)} 50%{opacity:1;transform:scale(1.2)} }
+.lt-bar-actions{ display: flex; gap: 6px; flex-shrink: 0; }
+.lt-bar-btn{
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid rgba(232,0,154,.25);
+  background: rgba(232,0,154,.08);
+  color: #FFB8D0;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s;
+  touch-action: manipulation;
+}
+.lt-bar-btn:hover, .lt-bar-btn:active{
+  background: rgba(232,0,154,.18);
+  border-color: rgba(232,0,154,.5);
+  transform: scale(1.06);
+}
+.lt-bar-close{
+  background: rgba(255,68,102,.06);
+  border-color: rgba(255,68,102,.2);
+  color: rgba(255,180,200,.7);
+}
+.lt-bar-close:hover{ background: rgba(255,68,102,.18); }
+
+/* Expandable body — holds the embed + controls */
+.lt-bar-body{
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .4s cubic-bezier(.2,.9,.3,1);
+}
+#ltBar.expanded .lt-bar-body{ max-height: 520px; }
+
+.lt-player-host{
+  padding: 6px 10px 10px;
+  position: relative;
+}
+.lt-player-host iframe,
+.lt-player-host > div{
+  width: 100% !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+.lt-audio-shell{
+  background: linear-gradient(135deg, rgba(232,0,154,.08), rgba(60,10,40,.5));
+  border: 1px solid rgba(232,0,154,.18);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.lt-audio-shell audio{
+  width: 100%;
+}
+
+/* Input row + share */
+.lt-controls{
+  padding: 6px 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.lt-input-row{ display: flex; gap: 8px; }
+.lt-input{
+  flex: 1;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(232,0,154,.22);
+  border-radius: 999px;
+  padding: 10px 16px;
+  color: #F2EBF8;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  outline: none;
+  min-width: 0;
+}
+.lt-input:focus{
+  border-color: rgba(232,0,154,.55);
+  background: rgba(232,0,154,.05);
+}
+.lt-load{
+  padding: 10px 16px;
+  border: none;
+  background: linear-gradient(135deg, #E8009A, #8B0052);
+  border-radius: 999px;
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.lt-quick-row{
+  display: flex; gap: 6px; overflow-x: auto;
+  padding-bottom: 4px;
+  margin-top: 4px;
+}
+.lt-quick-row::-webkit-scrollbar{ display: none; }
+.lt-quick-btn{
+  padding: 6px 12px;
+  border: 1px solid rgba(232,0,154,.18);
+  background: rgba(232,0,154,.04);
+  border-radius: 999px;
+  color: rgba(255,184,208,.8);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+.lt-quick-btn:hover{ background: rgba(232,0,154,.12); }
+
+/* Spotify embed needs at least 80px or 152px height to look right */
+#ltSpotifyHost{ min-height: 80px; }
+#ltSpotifyHost iframe{ min-height: 80px !important; }
+
+/* Mobile tuning */
+@media (max-width: 520px){
+  #ltBar{ width: calc(100vw - 14px); }
+  .lt-bar-title{ font-size: 12px; }
+  .lt-bar-status{ font-size: 8px; }
+  .lt-bar-btn{ width: 34px; height: 34px; font-size: 13px; }
+  .lt-input{ font-size: 16px; padding: 10px 14px; } /* 16px prevents iOS zoom */
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       2 · SPOTIFY IFRAME API loader
+       ═══════════════════════════════════════════════════════════════ */
+    let _spotifyReady = false;
+    let _spotifyLoading = null;
+    let _SpotifyIFrameAPI = null;
+    function _loadSpotifyAPI(){
+      if(_spotifyReady && _SpotifyIFrameAPI) return Promise.resolve(_SpotifyIFrameAPI);
+      if(_spotifyLoading) return _spotifyLoading;
+      _spotifyLoading = new Promise(resolve => {
+        const tag = document.createElement('script');
+        tag.src = 'https://open.spotify.com/embed/iframe-api/v1';
+        const prev = window.onSpotifyIframeApiReady;
+        window.onSpotifyIframeApiReady = function(IFrameAPI){
+          _SpotifyIFrameAPI = IFrameAPI;
+          _spotifyReady = true;
+          if(typeof prev === 'function') try{ prev(IFrameAPI); }catch(_){}
+          resolve(IFrameAPI);
+        };
+        document.head.appendChild(tag);
+      });
+      return _spotifyLoading;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       3 · YouTube IFrame API — reuse from Watch Together if present
+       ═══════════════════════════════════════════════════════════════ */
+    function _loadYouTubeAPI(){
+      if(window.YT && window.YT.Player) return Promise.resolve();
+      return new Promise(resolve => {
+        if(document.querySelector('script[src*="iframe_api"]')){
+          /* Already being loaded by Watch Together — just wait */
+          const check = setInterval(()=>{
+            if(window.YT && window.YT.Player){ clearInterval(check); resolve(); }
+          }, 100);
+          setTimeout(()=>{ clearInterval(check); resolve(); }, 5000);
+          return;
+        }
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        const prev = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = function(){
+          if(typeof prev === 'function') try{ prev(); }catch(_){}
+          resolve();
+        };
+        document.head.appendChild(tag);
+      });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       4 · URL DETECTION
+       ═══════════════════════════════════════════════════════════════ */
+    function _detectType(url){
+      if(!url) return 'unknown';
+      const lc = url.toLowerCase();
+      if(/open\.spotify\.com|spotify:/.test(lc)) return 'spotify';
+      if(/youtu\.be|youtube\.com|music\.youtube\.com/.test(lc)) return 'yt';
+      if(/\.(mp3|m4a|ogg|wav|flac|aac)(\?|$|#)/i.test(lc)) return 'audio';
+      if(/soundcloud\.com/.test(lc)) return 'iframe';
+      return 'iframe';
+    }
+    function _parseSpotifyUri(url){
+      /* Accept full URL or already-formatted URI */
+      if(url.startsWith('spotify:')) return url;
+      const m = url.match(/open\.spotify\.com\/(?:intl-[a-z]+\/)?(track|album|playlist|episode|show|artist)\/([a-zA-Z0-9]+)/);
+      if(m) return 'spotify:' + m[1] + ':' + m[2];
+      return null;
+    }
+    function _extractYouTubeId(url){
+      const patterns = [
+        /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+        /[?&]v=([a-zA-Z0-9_-]{11})/,
+        /embed\/([a-zA-Z0-9_-]{11})/,
+        /shorts\/([a-zA-Z0-9_-]{11})/,
+        /^([a-zA-Z0-9_-]{11})$/
+      ];
+      for(const p of patterns){ const m = url.match(p); if(m) return m[1]; }
+      return null;
+    }
+    function _trackLabelFor(url, type){
+      if(type === 'spotify'){
+        const m = url.match(/(track|album|playlist|episode|show)\//);
+        return m ? ('Spotify ' + m[1].charAt(0).toUpperCase() + m[1].slice(1)) : 'Spotify';
+      }
+      if(type === 'yt') return 'YouTube Audio';
+      if(type === 'audio') return url.split('/').pop().split('?')[0];
+      if(type === 'iframe') return 'External Track';
+      return 'Listening';
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       5 · STATE
+       ═══════════════════════════════════════════════════════════════ */
+    let _player = null;
+    let _playerType = null;
+    let _spotifyController = null;
+    let _currentUrl = null;
+    let _isApplyingRemote = false;
+    let _isApplyingTimeout = null;
+    let _lastPublish = 0;
+    let _listenerAttached = false;
+    let _driftTimer = null;
+    let _lastKnownPosition = 0;
+    let _lastKnownIsPlaying = false;
+
+    function _myUID(){
+      try{
+        if(typeof me !== 'undefined' && me && me.uid) return me.uid;
+      }catch(_){}
+      return 'anon-' + (window._spuranaSessionId || (window._spuranaSessionId = Math.random().toString(36).slice(2,10)));
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       6 · UI — build the floating bar
+       ═══════════════════════════════════════════════════════════════ */
+    function _ensureBar(){
+      let bar = document.getElementById('ltBar');
+      if(bar) return bar;
+      bar = document.createElement('div');
+      bar.id = 'ltBar';
+      bar.innerHTML = `
+        <div class="lt-bar-head">
+          <div class="lt-bar-icon">🎵</div>
+          <div class="lt-bar-info">
+            <div class="lt-bar-title" id="ltTitle">Listen Together</div>
+            <div class="lt-bar-status" id="ltStatus">
+              <span class="lt-sync-dot"></span>
+              <span id="ltStatusText">Paste a Spotify or YouTube link</span>
+            </div>
+          </div>
+          <div class="lt-bar-actions">
+            <button class="lt-bar-btn" id="ltExpandBtn" title="Expand / Collapse">▾</button>
+            <button class="lt-bar-btn" id="ltMinimizeBtn" title="Minimize to chip">━</button>
+            <button class="lt-bar-btn lt-bar-close" id="ltCloseBtn" title="Close">✕</button>
+          </div>
+        </div>
+        <div class="lt-bar-body">
+          <div class="lt-player-host" id="ltPlayerHost"></div>
+          <div class="lt-controls">
+            <div class="lt-input-row">
+              <input class="lt-input" id="ltInp" type="text" placeholder="https://open.spotify.com/track/… or YouTube link" />
+              <button class="lt-load" id="ltLoadBtn">Load ▶</button>
+            </div>
+            <div class="lt-quick-row" id="ltQuickRow"></div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(bar);
+
+      /* Wire interactions */
+      document.getElementById('ltExpandBtn').onclick = function(){
+        bar.classList.toggle('expanded');
+        this.textContent = bar.classList.contains('expanded') ? '▴' : '▾';
+      };
+      document.getElementById('ltMinimizeBtn').onclick = _minimize;
+      document.getElementById('ltCloseBtn').onclick = _close;
+      document.getElementById('ltLoadBtn').onclick = function(){
+        const inp = document.getElementById('ltInp');
+        if(inp && inp.value.trim()) _loadTrack(inp.value.trim());
+      };
+      const inp = document.getElementById('ltInp');
+      if(inp){
+        inp.addEventListener('keydown', function(e){
+          if(e.key === 'Enter' && inp.value.trim()) _loadTrack(inp.value.trim());
+        });
+      }
+      _populateQuickRow();
+      return bar;
+    }
+
+    function _populateQuickRow(){
+      const row = document.getElementById('ltQuickRow');
+      if(!row) return;
+      const quick = [
+        { label: '🎵 Lo-fi Beats', url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk' },
+        { label: '🌧 Rain + Piano', url: 'https://www.youtube.com/watch?v=4xDzrJKXOOY' },
+        { label: '🪷 Tabla Trance', url: 'https://www.youtube.com/watch?v=jOFkY1mURPI' },
+        { label: '☯ 432Hz Meditation', url: 'https://www.youtube.com/watch?v=ulNswX3If2U' },
+        { label: '✨ Ambient Cosmos', url: 'https://www.youtube.com/watch?v=h7VRkfeyz8c' }
+      ];
+      row.innerHTML = '';
+      quick.forEach(q => {
+        const b = document.createElement('button');
+        b.className = 'lt-quick-btn';
+        b.textContent = q.label;
+        b.onclick = function(){ _loadTrack(q.url); };
+        row.appendChild(b);
+      });
+    }
+
+    function _ensureChip(){
+      let chip = document.getElementById('ltChip');
+      if(chip) return chip;
+      chip = document.createElement('div');
+      chip.id = 'ltChip';
+      chip.innerHTML = `
+        <div class="lt-chip-icon" id="ltChipIcon">♪</div>
+        <div class="lt-chip-title" id="ltChipTitle">Listen Together</div>
+      `;
+      chip.onclick = function(){
+        chip.classList.remove('on');
+        const bar = document.getElementById('ltBar');
+        if(bar){ bar.classList.remove('minimized'); bar.classList.add('on'); }
+      };
+      document.body.appendChild(chip);
+      return chip;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       7 · OPEN / CLOSE / MINIMIZE
+       ═══════════════════════════════════════════════════════════════ */
+    window.openListenTogether = function(){
+      _attachListener();
+      const bar = _ensureBar();
+      _ensureChip();
+      bar.classList.remove('minimized');
+      bar.classList.add('on', 'expanded');
+      document.getElementById('ltExpandBtn').textContent = '▴';
+      /* If a session is already active in Firebase, resume it */
+      if(typeof db !== 'undefined' && db && !_currentUrl){
+        db.ref(STATE_REF).once('value').then(function(snap){
+          const state = snap.val();
+          if(state && state.url){
+            const inp = document.getElementById('ltInp');
+            if(inp) inp.value = state.url;
+            _loadTrack(state.url, state);
+          }
+        }).catch(()=>{});
+      }
+    };
+
+    function _minimize(){
+      const bar = document.getElementById('ltBar');
+      const chip = _ensureChip();
+      if(bar){ bar.classList.remove('on'); bar.classList.add('minimized'); }
+      /* Show chip only if something is loaded */
+      if(_currentUrl){
+        chip.classList.add('on');
+        _updateChipText();
+      }
+    }
+
+    function _close(){
+      const bar = document.getElementById('ltBar');
+      const chip = document.getElementById('ltChip');
+      if(bar) bar.classList.remove('on');
+      if(chip) chip.classList.remove('on');
+      _stopDriftSync();
+      _disposePlayer();
+      _currentUrl = null;
+      /* We do NOT clear shared/listen_session — partner may want to keep listening */
+    }
+
+    function _updateChipText(){
+      const t = document.getElementById('ltChipTitle');
+      const ic = document.getElementById('ltChipIcon');
+      const titleEl = document.getElementById('ltTitle');
+      if(t && titleEl) t.textContent = titleEl.textContent;
+      if(ic) ic.classList.toggle('paused', !_lastKnownIsPlaying);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       8 · PLAYER CREATION per type
+       ═══════════════════════════════════════════════════════════════ */
+    async function _loadTrack(url, initialState){
+      _ensureBar();
+      const type = _detectType(url);
+      _currentUrl = url;
+      _playerType = type;
+      _disposePlayer();
+
+      const titleEl = document.getElementById('ltTitle');
+      const statusEl = document.getElementById('ltStatusText');
+      const host = document.getElementById('ltPlayerHost');
+      if(titleEl) titleEl.textContent = _trackLabelFor(url, type);
+      if(statusEl) statusEl.textContent = 'Loading…';
+
+      if(!host) return;
+      host.innerHTML = '';
+
+      if(type === 'spotify'){
+        const uri = _parseSpotifyUri(url);
+        if(!uri){
+          if(statusEl) statusEl.textContent = 'Invalid Spotify URL';
+          return;
+        }
+        const div = document.createElement('div');
+        div.id = 'ltSpotifyHost';
+        host.appendChild(div);
+        const IFrameAPI = await _loadSpotifyAPI();
+        const isCompound = /album|playlist|show/.test(uri);
+        const options = {
+          width: '100%',
+          height: isCompound ? '352' : '152',
+          uri: uri
+        };
+        const callback = function(EmbedController){
+          _spotifyController = EmbedController;
+          _player = EmbedController;
+          EmbedController.addListener('ready', function(){
+            if(statusEl) statusEl.innerHTML = '<span class="lt-sync-dot"></span> Live · Synced';
+            if(initialState && initialState.lastBy !== _myUID()){
+              setTimeout(()=>_applyRemoteState(initialState, true), 800);
+            }
+            _startDriftSync();
+          });
+          EmbedController.addListener('playback_update', function(e){
+            if(!e || !e.data) return;
+            const { position, duration, isPaused, isBuffering } = e.data;
+            _lastKnownPosition = (position || 0) / 1000;
+            _lastKnownIsPlaying = !isPaused;
+            _updateChipText();
+            if(_isApplyingRemote) return;
+            _publishState({ isPlaying: !isPaused, currentTime: (position || 0) / 1000 });
+          });
+        };
+        IFrameAPI.createController(div, options, callback);
+      } else if(type === 'yt'){
+        const id = _extractYouTubeId(url);
+        if(!id){
+          if(statusEl) statusEl.textContent = 'Invalid YouTube URL';
+          return;
+        }
+        const div = document.createElement('div');
+        div.id = 'ltYtPlayer';
+        div.style.width = '100%';
+        div.style.height = '152px';
+        host.appendChild(div);
+        await _loadYouTubeAPI();
+        _player = new YT.Player('ltYtPlayer', {
+          videoId: id,
+          width: '100%',
+          height: '152',
+          playerVars: {
+            rel: 0, modestbranding: 1, playsinline: 1,
+            enablejsapi: 1, origin: window.location.origin
+          },
+          events: {
+            'onReady': function(e){
+              try{ e.target.playVideo(); }catch(_){}
+              if(statusEl) statusEl.innerHTML = '<span class="lt-sync-dot"></span> Live · Synced';
+              if(initialState && initialState.lastBy !== _myUID()){
+                setTimeout(()=>_applyRemoteState(initialState, true), 800);
+              }
+              _startDriftSync();
+              /* Try to pull title from YT after a moment */
+              setTimeout(function(){
+                try{
+                  const data = _player.getVideoData && _player.getVideoData();
+                  if(data && data.title && titleEl) titleEl.textContent = data.title;
+                }catch(_){}
+              }, 1200);
+            },
+            'onStateChange': function(e){
+              if(!_player || !_player.getCurrentTime) return;
+              _lastKnownPosition = _player.getCurrentTime();
+              const s = e.data;
+              _lastKnownIsPlaying = (s === 1);
+              _updateChipText();
+              if(_isApplyingRemote) return;
+              if(s === 1) _publishState({ isPlaying: true, currentTime: _player.getCurrentTime() });
+              else if(s === 2) _publishState({ isPlaying: false, currentTime: _player.getCurrentTime() });
+            },
+            'onError': function(e){
+              if(statusEl) statusEl.textContent = 'YouTube error: ' + e.data;
+            }
+          }
+        });
+      } else if(type === 'audio'){
+        const shell = document.createElement('div');
+        shell.className = 'lt-audio-shell';
+        const a = document.createElement('audio');
+        a.id = 'ltAudio';
+        a.src = url;
+        a.controls = true;
+        a.preload = 'metadata';
+        shell.appendChild(a);
+        host.appendChild(shell);
+        _player = a;
+        a.addEventListener('play', function(){
+          _lastKnownIsPlaying = true; _lastKnownPosition = a.currentTime;
+          _updateChipText();
+          if(_isApplyingRemote) return;
+          _publishState({ isPlaying: true, currentTime: a.currentTime });
+        });
+        a.addEventListener('pause', function(){
+          _lastKnownIsPlaying = false; _lastKnownPosition = a.currentTime;
+          _updateChipText();
+          if(_isApplyingRemote) return;
+          _publishState({ isPlaying: false, currentTime: a.currentTime });
+        });
+        a.addEventListener('seeked', function(){
+          _lastKnownPosition = a.currentTime;
+          if(_isApplyingRemote) return;
+          _publishState({ isPlaying: !a.paused, currentTime: a.currentTime });
+        });
+        a.addEventListener('loadedmetadata', function(){
+          if(statusEl) statusEl.innerHTML = '<span class="lt-sync-dot"></span> Live · Synced';
+          if(initialState && initialState.lastBy !== _myUID()){
+            setTimeout(()=>_applyRemoteState(initialState, true), 400);
+          }
+          _startDriftSync();
+        });
+        try{ a.play().catch(()=>{}); }catch(_){}
+      } else {
+        /* Fallback iframe — no sync */
+        const iframe = document.createElement('iframe');
+        iframe.src = url;
+        iframe.style.cssText = 'width:100%;height:200px;border:none;border-radius:12px';
+        iframe.allow = 'autoplay; encrypted-media';
+        host.appendChild(iframe);
+        if(statusEl) statusEl.textContent = 'Loaded (sync unavailable for this source)';
+        _player = iframe;
+      }
+    }
+
+    function _disposePlayer(){
+      _stopDriftSync();
+      try{
+        if(_playerType === 'yt' && _player && _player.destroy) _player.destroy();
+        else if(_playerType === 'spotify' && _spotifyController && _spotifyController.destroy) _spotifyController.destroy();
+        else if(_playerType === 'audio' && _player){ _player.pause(); _player.removeAttribute('src'); _player.load(); }
+      }catch(_){}
+      _spotifyController = null;
+      _player = null;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       9 · FIREBASE SYNC — same pattern as Watch Together
+       ═══════════════════════════════════════════════════════════════ */
+    function _publishState(partial){
+      if(typeof db === 'undefined' || !db) return;
+      if(_isApplyingRemote) return;
+      const now = Date.now();
+      if(now - _lastPublish < 250) return;
+      _lastPublish = now;
+      const state = {
+        url: _currentUrl,
+        type: _playerType,
+        isPlaying: !!partial.isPlaying,
+        currentTime: Math.max(0, partial.currentTime || 0),
+        lastUpdated: now,
+        lastBy: _myUID(),
+        lastByName: (typeof me !== 'undefined' && me) ? (me.name || 'Beloved') : 'Beloved'
+      };
+      db.ref(STATE_REF).set(state).catch(()=>{});
+    }
+
+    function _applyRemoteState(state, isInitial){
+      if(!state) return;
+      if(state.lastBy === _myUID() && !isInitial) return;
+      _isApplyingRemote = true;
+      if(_isApplyingTimeout) clearTimeout(_isApplyingTimeout);
+      _isApplyingTimeout = setTimeout(function(){ _isApplyingRemote = false; }, 800);
+      const statusEl = document.getElementById('ltStatusText');
+      if(!isInitial && state.lastByName && statusEl){
+        statusEl.innerHTML = '<span class="lt-sync-dot"></span> Synced from ' + state.lastByName;
+        setTimeout(function(){
+          if(statusEl) statusEl.innerHTML = '<span class="lt-sync-dot"></span> Live · Synced';
+        }, 2500);
+      }
+      try{
+        const elapsed = (Date.now() - (state.lastUpdated || Date.now())) / 1000;
+        const targetTime = state.isPlaying ? (state.currentTime + elapsed) : state.currentTime;
+        if(_playerType === 'spotify' && _spotifyController){
+          /* Spotify Iframe API supports seek(ms) and play()/pause() but seek positions are
+             absolute milliseconds. Use targetTime * 1000. */
+          if(Math.abs(_lastKnownPosition - targetTime) > 1.5){
+            try{ _spotifyController.seek(targetTime); }catch(_){}
+          }
+          if(state.isPlaying && !_lastKnownIsPlaying){ try{ _spotifyController.play(); }catch(_){} }
+          else if(!state.isPlaying && _lastKnownIsPlaying){ try{ _spotifyController.pause(); }catch(_){} }
+        } else if(_playerType === 'yt' && _player && _player.getCurrentTime){
+          const local = _player.getCurrentTime();
+          if(Math.abs(local - targetTime) > 1.5) _player.seekTo(targetTime, true);
+          const ps = _player.getPlayerState();
+          if(state.isPlaying && ps !== 1) _player.playVideo();
+          else if(!state.isPlaying && ps === 1) _player.pauseVideo();
+        } else if(_playerType === 'audio' && _player){
+          if(Math.abs(_player.currentTime - targetTime) > 1.5) _player.currentTime = Math.max(0, targetTime);
+          if(state.isPlaying && _player.paused) _player.play().catch(()=>{});
+          else if(!state.isPlaying && !_player.paused) _player.pause();
+        }
+      }catch(err){ console.warn('[ListenSync] apply failed:', err); }
+    }
+
+    function _attachListener(){
+      if(_listenerAttached) return;
+      if(typeof db === 'undefined' || !db) return;
+      _listenerAttached = true;
+      db.ref(STATE_REF).on('value', function(snap){
+        const state = snap.val();
+        if(!state) return;
+        const bar = document.getElementById('ltBar');
+        const isOpen = bar && bar.classList.contains('on');
+        if(state.url && state.url !== _currentUrl){
+          /* New track from partner */
+          if(isOpen){
+            const inp = document.getElementById('ltInp');
+            if(inp) inp.value = state.url;
+            _loadTrack(state.url, state);
+          } else {
+            /* Show chip nudge so user knows partner started something */
+            _ensureChip();
+            const chip = document.getElementById('ltChip');
+            const ct = document.getElementById('ltChipTitle');
+            const ic = document.getElementById('ltChipIcon');
+            if(ct) ct.textContent = (state.lastByName || 'Partner') + ' is listening · tap to join';
+            if(ic) ic.classList.toggle('paused', !state.isPlaying);
+            chip.classList.add('on');
+          }
+          return;
+        }
+        if(isOpen){ _applyRemoteState(state); }
+        else {
+          /* Update chip display */
+          const ct = document.getElementById('ltChipTitle');
+          const ic = document.getElementById('ltChipIcon');
+          if(ct && state.url){ ct.textContent = 'Listening together'; }
+          if(ic) ic.classList.toggle('paused', !state.isPlaying);
+        }
+      });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       10 · DRIFT SYNC — every 4s while playing
+       ═══════════════════════════════════════════════════════════════ */
+    function _startDriftSync(){
+      _stopDriftSync();
+      _driftTimer = setInterval(function(){
+        if(_isApplyingRemote) return;
+        if(_playerType === 'yt' && _player && _player.getPlayerState && _player.getPlayerState() === 1){
+          _publishState({ isPlaying: true, currentTime: _player.getCurrentTime() });
+        } else if(_playerType === 'audio' && _player && !_player.paused){
+          _publishState({ isPlaying: true, currentTime: _player.currentTime });
+        } else if(_playerType === 'spotify' && _lastKnownIsPlaying){
+          _publishState({ isPlaying: true, currentTime: _lastKnownPosition });
+        }
+      }, 4500);
+    }
+    function _stopDriftSync(){ if(_driftTimer){ clearInterval(_driftTimer); _driftTimer = null; } }
+
+    /* ═══════════════════════════════════════════════════════════════
+       11 · WIRE TO SANCTUARY HUB CONNECT category
+       ═══════════════════════════════════════════════════════════════ */
+    function _ensureListenDoor(){
+      if(typeof DOOR_REALMS === 'undefined') return false;
+      const connect = DOOR_REALMS.find(r => r.cat === 'Connect');
+      if(!connect) return false;
+      if(connect.doors.find(d => d.fn === 'openListenTogether')) return true;
+      /* Add right after Watch Together if present, otherwise at end */
+      const watchIdx = connect.doors.findIndex(d => /watch/i.test(d.n));
+      const newDoor = { e: '🎵', n: 'Listen Together', fn: 'openListenTogether' };
+      if(watchIdx >= 0) connect.doors.splice(watchIdx + 1, 0, newDoor);
+      else connect.doors.push(newDoor);
+      return true;
+    }
+    function _wireDoor(){ return _ensureListenDoor(); }
+
+    /* BULLETPROOF: also wrap openDoors() so the door is guaranteed
+       to be present at every render, regardless of what other patches
+       do to DOOR_REALMS. This survives v4.1, v6, Prodhidhwoni patches,
+       Inner Journey patches, and anything else that rewrites doors. */
+    function _wrapOpenDoors(){
+      if(typeof window.openDoors !== 'function') return false;
+      if(window.openDoors.__listenWrapped) return true;
+      const origOpenDoors = window.openDoors;
+      window.openDoors = function(){
+        _ensureListenDoor();
+        return origOpenDoors.apply(this, arguments);
+      };
+      window.openDoors.__listenWrapped = true;
+      return true;
+    }
+
+    let _wireTries = 0;
+    const _wireTimer = setInterval(function(){
+      _wireTries++;
+      const doorAdded = _wireDoor();
+      const wrapped = _wrapOpenDoors();
+      if((doorAdded && wrapped) || _wireTries > 80) clearInterval(_wireTimer);
+    }, 200);
+
+    /* Also wire once on DOMContentLoaded (belt + suspenders) */
+    if(document.readyState !== 'loading'){
+      setTimeout(() => { _ensureListenDoor(); _wrapOpenDoors(); }, 100);
+    } else {
+      document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => { _ensureListenDoor(); _wrapOpenDoors(); }, 100);
+      });
+    }
+
+    /* Always attach Firebase listener once db is ready (so chip can appear
+       when partner starts a session, even if user hasn't opened it yet) */
+    let _listenerTries = 0;
+    const _listenerInterval = setInterval(function(){
+      _listenerTries++;
+      if(typeof db !== 'undefined' && db){ _attachListener(); clearInterval(_listenerInterval); }
+      if(_listenerTries > 60) clearInterval(_listenerInterval);
+    }, 500);
+
+    /* Debug + public API */
+    window._listenTogether = {
+      load: _loadTrack,
+      publish: _publishState,
+      state: function(){ return { type: _playerType, url: _currentUrl, position: _lastKnownPosition, isPlaying: _lastKnownIsPlaying }; },
+      reset: function(){ if(typeof db !== 'undefined' && db) db.ref(STATE_REF).remove(); _close(); }
+    };
+
+    console.log('Spurana ✦ Listen Together online — Spotify + YouTube + audio. Firebase-synced. Door: Connect → 🎵 Listen Together.');
+  })();
+
+
 
 
 

@@ -1,0 +1,39 @@
+# Spurana ✦ Git attributes
+# Normalize line endings — critical when committing from Windows + Vercel deploys from Linux
+
+# Default: convert to LF on commit, restore native on checkout
+* text=auto eol=lf
+
+# Source files — always LF
+*.html       text eol=lf
+*.js         text eol=lf
+*.css        text eol=lf
+*.json       text eol=lf
+*.md         text eol=lf
+*.toml       text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+
+# Shell scripts — must be LF (Linux runs them on Vercel)
+*.sh         text eol=lf
+
+# Binary — never touch
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.ico        binary
+*.svg        text eol=lf
+*.woff       binary
+*.woff2      binary
+*.ttf        binary
+*.otf        binary
+*.zip        binary
+*.pdf        binary
+*.mp3        binary
+*.mp4        binary
+*.webm       binary
+
+# Mark generated/large files for GitHub
+index.html linguist-detectable=true
+index.html linguist-language=HTML

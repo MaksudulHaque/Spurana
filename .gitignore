@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────────
+# Spurana ✦ .gitignore
+# ─────────────────────────────────────────────────────────────────
+
+# ── Local secrets — NEVER commit ─────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# ── Vercel CLI metadata ──────────────────────────────────────────
+.vercel
+
+# ── Netlify CLI metadata ─────────────────────────────────────────
+.netlify
+
+# ── Node dependencies (we have none, but just in case) ───────────
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── OS junk ──────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── Editor / IDE ─────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+*.sublime-project
+*.sublime-workspace
+
+# ── Logs & temp ──────────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+*.cache
+.cache/
+
+# ── Build output (we have none, just safety) ─────────────────────
+dist/
+build/
+out/
+
+# ── Firebase emulator cache ──────────────────────────────────────
+.firebase/
+firebase-debug.log
+
+# ── Anything starting with _local or _draft ─────────────────────
+_local*
+_draft*

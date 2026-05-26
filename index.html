@@ -25853,6 +25853,2270 @@ button[onclick*="classList.remove"]{
     console.log('Spurana ✦ Listen Together online — Spotify + YouTube + audio. Firebase-synced. Door: Connect → 🎵 Listen Together.');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  LISTEN TOGETHER LIVE — Always-on real-time sync upgrade       ║
+     ║                                                                ║
+     ║  Problem with v1: the player only listens for partner activity ║
+     ║  AFTER user opens the modal. Even when chip appears, user has  ║
+     ║  to manually tap to start hearing. Browsers also block audio   ║
+     ║  autoplay without a user gesture. End result: partner starts a ║
+     ║  song, you don't hear it.                                      ║
+     ║                                                                ║
+     ║  This upgrade makes the player TRULY universal:                ║
+     ║                                                                ║
+     ║   1 · Firebase listener attaches on page load — always on      ║
+     ║   2 · When partner starts a new track:                         ║
+     ║         · The bar auto-opens                                   ║
+     ║         · Track loads into the embed automatically             ║
+     ║         · Try to autoplay → if blocked, big "TAP TO HEAR ♪"    ║
+     ║           prompt appears front-and-center                      ║
+     ║   3 · Once user taps once in this session, future autoplays    ║
+     ║         succeed (audio context unlocked)                       ║
+     ║   4 · Live sync indicator shows: Live · Connecting · Offline   ║
+     ║   5 · Partner activity log: "BLACKWATER played X · 2s ago"     ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function ListenTogetherLive(){
+    'use strict';
+
+    const STATE_REF = 'shared/listen_session';
+
+    /* ═══════════════════════════════════════════════════════════════
+       CSS — Tap-to-Hear prompt + Live indicator
+       ═══════════════════════════════════════════════════════════════ */
+    if(!document.getElementById('ltLiveStyles')){
+      const s = document.createElement('style');
+      s.id = 'ltLiveStyles';
+      s.textContent = `
+/* Tap-to-hear overlay — appears when partner started but autoplay was blocked */
+#ltTapToHear{
+  position: fixed;
+  top: calc(env(safe-area-inset-top,0) + 90px);
+  left: 50%;
+  transform: translateX(-50%) scale(.92);
+  z-index: 9000;
+  background: linear-gradient(135deg, #E8009A, #8B0052);
+  border-radius: 999px;
+  padding: 14px 26px 14px 20px;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  box-shadow: 0 8px 32px rgba(232,0,154,.5), 0 0 80px rgba(232,0,154,.25);
+  animation: lthPulse 1.6s ease-in-out infinite;
+  opacity: 0;
+  transition: opacity .35s, transform .35s cubic-bezier(.2,.9,.3,1);
+}
+#ltTapToHear.on{ display: flex; opacity: 1; transform: translateX(-50%) scale(1); }
+@keyframes lthPulse{
+  0%,100%{ box-shadow: 0 8px 32px rgba(232,0,154,.5), 0 0 60px rgba(232,0,154,.2); }
+  50%{ box-shadow: 0 12px 44px rgba(232,0,154,.65), 0 0 100px rgba(232,0,154,.4); }
+}
+.lth-icon{
+  width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(255,255,255,.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  animation: lthSpin 3s linear infinite;
+}
+@keyframes lthSpin{ from{transform:rotate(0)} to{transform:rotate(360deg)} }
+.lth-text{
+  display: flex; flex-direction: column;
+  font-family: 'Cinzel Decorative', serif;
+  color: #fff;
+}
+.lth-line1{ font-size: 13px; letter-spacing: .04em; line-height: 1.2; }
+.lth-line2{ font-size: 10px; opacity: .8; letter-spacing: .15em; text-transform: uppercase; margin-top: 2px; font-family: 'Orbitron', monospace; }
+
+/* Connection status dot (sits in the bar status row) */
+.lt-conn-status{
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(255,255,255,.04);
+  border-radius: 999px;
+  font-family: 'Orbitron', monospace;
+  font-size: 8px;
+  letter-spacing: .15em;
+  color: rgba(242,235,248,.6);
+  text-transform: uppercase;
+}
+.lt-conn-dot{ width: 5px; height: 5px; border-radius: 50%; }
+.lt-conn-dot.live{ background: #00E5A0; box-shadow: 0 0 6px #00E5A0; animation: lthDotPulse 1.6s ease-in-out infinite; }
+.lt-conn-dot.connecting{ background: #FFD16B; box-shadow: 0 0 6px #FFD16B; animation: lthDotPulse 0.8s ease-in-out infinite; }
+.lt-conn-dot.offline{ background: #FF4466; }
+@keyframes lthDotPulse{ 0%,100%{opacity:.5;transform:scale(.7)} 50%{opacity:1;transform:scale(1.2)} }
+
+/* Partner activity ticker — shows recent activity */
+.lt-partner-ticker{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(255,184,208,.7);
+  padding: 4px 12px 0;
+  text-align: center;
+}
+
+/* Mobile */
+@media (max-width: 520px){
+  #ltTapToHear{ padding: 12px 20px 12px 16px; max-width: 92vw; }
+  .lth-line1{ font-size: 12px; }
+  .lth-line2{ font-size: 9px; }
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Audio-gesture state — once user has clicked anywhere in the
+       Listen Together UI, mark autoplay as unlocked
+       ═══════════════════════════════════════════════════════════════ */
+    let _audioUnlocked = false;
+    function _unlockAudio(){
+      _audioUnlocked = true;
+      try{
+        /* Touch a silent audio context to fully unlock */
+        if(!window._ltAudioCtx){
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if(AC){
+            window._ltAudioCtx = new AC();
+            const o = window._ltAudioCtx.createOscillator();
+            const g = window._ltAudioCtx.createGain();
+            g.gain.value = 0;
+            o.connect(g).connect(window._ltAudioCtx.destination);
+            o.start();
+            o.stop(window._ltAudioCtx.currentTime + 0.001);
+          }
+        }
+      }catch(_){}
+    }
+    /* Mark unlocked on ANY user click — global gesture capture */
+    document.addEventListener('click', _unlockAudio, { once: true, capture: true });
+    document.addEventListener('touchend', _unlockAudio, { once: true, capture: true });
+
+    /* ═══════════════════════════════════════════════════════════════
+       Live sync state — Firebase connection monitor
+       ═══════════════════════════════════════════════════════════════ */
+    let _connState = 'connecting'; /* live | connecting | offline */
+    function _updateConnIndicator(){
+      let dot = document.getElementById('ltConnDot');
+      let label = document.getElementById('ltConnLabel');
+      if(!dot){
+        /* Inject into the existing status area */
+        const statusEl = document.querySelector('.lt-bar-status');
+        if(!statusEl) return;
+        const wrap = document.createElement('span');
+        wrap.className = 'lt-conn-status';
+        wrap.innerHTML = '<span class="lt-conn-dot" id="ltConnDot"></span><span id="ltConnLabel">Live</span>';
+        statusEl.appendChild(wrap);
+        dot = document.getElementById('ltConnDot');
+        label = document.getElementById('ltConnLabel');
+      }
+      dot.className = 'lt-conn-dot ' + _connState;
+      label.textContent = _connState === 'live' ? 'Live' : (_connState === 'connecting' ? 'Connecting…' : 'Offline');
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Always-on Firebase listener — attaches as soon as db is ready,
+       regardless of whether modal is open
+       ═══════════════════════════════════════════════════════════════ */
+    let _globalListenerAttached = false;
+    let _lastSeenState = null;
+    let _lastSeenUrl = null;
+
+    function _attachGlobalListener(){
+      if(_globalListenerAttached) return false;
+      if(typeof db === 'undefined' || !db) return false;
+      _globalListenerAttached = true;
+      _connState = 'live';
+      /* Watch the connection state too */
+      try{
+        db.ref('.info/connected').on('value', function(snap){
+          const connected = !!snap.val();
+          _connState = connected ? 'live' : 'offline';
+          _updateConnIndicator();
+        });
+      }catch(_){}
+      /* Main session listener */
+      db.ref(STATE_REF).on('value', function(snap){
+        const state = snap.val();
+        if(!state) return;
+        _onPartnerStateChange(state);
+      });
+      console.log('[LT-Live] Always-on Firebase listener attached.');
+      return true;
+    }
+
+    /* When a state update arrives — decide what to do */
+    function _onPartnerStateChange(state){
+      if(!state || !state.url) return;
+      _lastSeenState = state;
+      /* Is this our own echo? */
+      const myUID = _myUID();
+      if(state.lastBy === myUID) return;
+
+      /* Different track than what we have? */
+      const currentUrl = _currentTrackUrl();
+      if(state.url !== currentUrl){
+        /* PARTNER STARTED A NEW TRACK */
+        console.log('[LT-Live] Partner started new track:', state.url);
+        /* Auto-open the bar */
+        const bar = document.getElementById('ltBar');
+        if(bar && !bar.classList.contains('on')){
+          /* Open it — this also attaches the inner listener */
+          if(typeof window.openListenTogether === 'function'){
+            window.openListenTogether();
+          }
+        }
+        /* Wait for the bar to render, then load + try autoplay */
+        setTimeout(function(){
+          if(typeof window._listenTogether === 'object' && typeof window._listenTogether.load === 'function'){
+            window._listenTogether.load(state.url, state);
+            /* If autoplay isn't unlocked yet, show the prompt */
+            if(!_audioUnlocked){
+              _showTapToHear(state.lastByName || 'Partner', state.url);
+            }
+          }
+        }, 400);
+        return;
+      }
+      /* Same track — just sync state if bar is open (handled by inner listener) */
+    }
+
+    function _currentTrackUrl(){
+      try{
+        if(typeof window._listenTogether === 'object' && typeof window._listenTogether.state === 'function'){
+          const s = window._listenTogether.state();
+          return s && s.url;
+        }
+      }catch(_){}
+      return null;
+    }
+
+    function _myUID(){
+      try{
+        if(typeof me !== 'undefined' && me && me.uid) return me.uid;
+      }catch(_){}
+      return 'anon-' + (window._spuranaSessionId || (window._spuranaSessionId = Math.random().toString(36).slice(2,10)));
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Tap-to-Hear prompt — when autoplay is blocked
+       ═══════════════════════════════════════════════════════════════ */
+    function _showTapToHear(partnerName, url){
+      let el = document.getElementById('ltTapToHear');
+      if(!el){
+        el = document.createElement('div');
+        el.id = 'ltTapToHear';
+        el.innerHTML = `
+          <div class="lth-icon">♪</div>
+          <div class="lth-text">
+            <div class="lth-line1" id="ltthLine1">Tap to hear</div>
+            <div class="lth-line2" id="ltthLine2">Partner is listening</div>
+          </div>
+        `;
+        document.body.appendChild(el);
+        el.onclick = function(){
+          _unlockAudio();
+          _hideTapToHear();
+          /* Force play */
+          setTimeout(function(){
+            try{
+              if(typeof window._listenTogether === 'object' && typeof window._listenTogether.publish === 'function'){
+                /* Re-apply latest state to force play through */
+                if(_lastSeenState){
+                  if(typeof window._listenTogether.load === 'function'){
+                    window._listenTogether.load(_lastSeenState.url, _lastSeenState);
+                  }
+                }
+              }
+            }catch(_){}
+          }, 100);
+        };
+      }
+      const l1 = document.getElementById('ltthLine1');
+      const l2 = document.getElementById('ltthLine2');
+      if(l1) l1.textContent = 'Tap to hear ♪';
+      if(l2) l2.textContent = (partnerName || 'Partner') + ' is listening';
+      el.classList.add('on');
+    }
+    function _hideTapToHear(){
+      const el = document.getElementById('ltTapToHear');
+      if(el) el.classList.remove('on');
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Smart wait — attach listener as soon as db is ready
+       ═══════════════════════════════════════════════════════════════ */
+    let _waitTries = 0;
+    const _waitTimer = setInterval(function(){
+      _waitTries++;
+      if(_attachGlobalListener() || _waitTries > 120){
+        clearInterval(_waitTimer);
+        /* Try to inject the conn indicator if the bar exists */
+        setTimeout(_updateConnIndicator, 500);
+      }
+    }, 250);
+
+    /* Also update indicator whenever the bar appears (it may render later) */
+    if('MutationObserver' in window){
+      const obs = new MutationObserver(function(){
+        if(document.querySelector('.lt-bar-status') && !document.getElementById('ltConnDot')){
+          _updateConnIndicator();
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Auto-hide tap-to-hear once audio unlocks
+       ═══════════════════════════════════════════════════════════════ */
+    document.addEventListener('click', function(){
+      if(_audioUnlocked) _hideTapToHear();
+    }, { capture: true });
+
+    /* ═══════════════════════════════════════════════════════════════
+       Public — for debugging
+       ═══════════════════════════════════════════════════════════════ */
+    window._ltLive = {
+      forceUnlock: function(){ _unlockAudio(); _hideTapToHear(); },
+      status: function(){
+        return {
+          connected: _connState,
+          listenerAttached: _globalListenerAttached,
+          audioUnlocked: _audioUnlocked,
+          lastSeen: _lastSeenState
+        };
+      },
+      simulatePartner: function(url){
+        _onPartnerStateChange({ url: url, isPlaying: true, currentTime: 0, lastBy: 'fake', lastByName: 'Test Partner', lastUpdated: Date.now() });
+      }
+    };
+
+    console.log('Spurana ✦ Listen Together LIVE — always-on listener, auto-open on partner activity, tap-to-hear if autoplay blocked. _ltLive.status() to debug.');
+  })();
+
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  AUDIO BROADCAST — share what YOU hear to BLACKWATER           ║
+     ║                                                                ║
+     ║  The Premium-vs-Free problem: Spotify enforces one-account-    ║
+     ║  one-stream. You can't share your Premium login with her.      ║
+     ║  But you CAN broadcast the audio that's playing on YOUR device ║
+     ║  through WebRTC, like Discord's "Go Live".                     ║
+     ║                                                                ║
+     ║  How it works:                                                 ║
+     ║   1 · You open Spotify (or any music source) in a browser tab  ║
+     ║   2 · Tap 📡 Broadcast in Listen Together                      ║
+     ║   3 · Browser asks: pick the tab to share — pick the Spotify   ║
+     ║       tab — IMPORTANT: tick "Share tab audio" in that prompt   ║
+     ║   4 · Your audio streams to BLACKWATER via WebRTC              ║
+     ║   5 · She gets a prompt: "NWP is broadcasting · Tap to listen" ║
+     ║   6 · She taps → audio plays through her speakers              ║
+     ║                                                                ║
+     ║  Works for ANY audio source: Spotify, Apple Music, YouTube     ║
+     ║  Music, podcasts, your own files. She doesn't need a Spotify   ║
+     ║  account at all.                                               ║
+     ║                                                                ║
+     ║  Latency: typically 100-300ms · feels real-time                ║
+     ║  Quality: depends on connection, generally 96-192kbps          ║
+     ║  Desktop-only (getDisplayMedia not supported on mobile)        ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function AudioBroadcast(){
+    'use strict';
+
+    const BCAST_REF = 'rtc/audioBroadcast';
+
+    /* RTC config — reuse the same TURN servers as Sacred Call */
+    function _getRtcConfig(){
+      if(typeof RTC_CONFIG !== 'undefined') return RTC_CONFIG;
+      /* Fallback */
+      return {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
+        ]
+      };
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CSS — broadcast button + status banner + receive prompt
+       ═══════════════════════════════════════════════════════════════ */
+    if(!document.getElementById('abStyles')){
+      const s = document.createElement('style');
+      s.id = 'abStyles';
+      s.textContent = `
+/* Broadcast button — appears in Listen Together bar controls */
+.ab-bcast-btn{
+  padding: 8px 14px;
+  border: 1px solid rgba(232,0,154,.45);
+  background: linear-gradient(135deg, rgba(232,0,154,.18), rgba(140,0,80,.12));
+  border-radius: 999px;
+  color: #FFD0DE;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .15em;
+  cursor: pointer;
+  white-space: nowrap;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all .25s;
+  flex-shrink: 0;
+}
+.ab-bcast-btn:hover{
+  background: linear-gradient(135deg, rgba(232,0,154,.32), rgba(140,0,80,.22));
+  border-color: rgba(232,0,154,.7);
+  transform: translateY(-1px);
+}
+.ab-bcast-btn.live{
+  background: linear-gradient(135deg, #FF1744, #B71C1C);
+  border: none;
+  color: #fff;
+  animation: abLivePulse 1.6s ease-in-out infinite;
+}
+@keyframes abLivePulse{
+  0%,100%{ box-shadow: 0 0 0 0 rgba(255,23,68,.5); }
+  50%{ box-shadow: 0 0 0 6px rgba(255,23,68,0); }
+}
+
+/* Status banner — slim line showing broadcast state */
+#abBanner{
+  margin: 0 10px;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(255,23,68,.12), rgba(232,0,154,.08));
+  border: 1px solid rgba(255,23,68,.3);
+  border-left: 3px solid #FF1744;
+  border-radius: 8px;
+  font-family: 'Orbitron', monospace;
+  font-size: 9.5px;
+  letter-spacing: .18em;
+  color: #FFB8D0;
+  text-transform: uppercase;
+  display: none;
+  align-items: center;
+  gap: 10px;
+}
+#abBanner.on{ display: flex; }
+.ab-banner-dot{
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #FF1744;
+  box-shadow: 0 0 6px #FF1744;
+  animation: abDotPulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes abDotPulse{ 0%,100%{opacity:.5;transform:scale(.7)} 50%{opacity:1;transform:scale(1.3)} }
+.ab-banner-text{ flex: 1; min-width: 0; }
+.ab-banner-stop{
+  border: none;
+  background: rgba(255,23,68,.18);
+  color: #FFB8D0;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ab-banner-stop:hover{ background: rgba(255,23,68,.32); }
+
+/* Receive prompt — big pulsing button when partner starts broadcasting */
+#abReceivePrompt{
+  position: fixed;
+  top: calc(env(safe-area-inset-top,0) + 90px);
+  left: 50%;
+  transform: translateX(-50%) scale(.92);
+  z-index: 9100;
+  background: linear-gradient(135deg, #FF1744, #B71C1C);
+  border-radius: 999px;
+  padding: 14px 24px 14px 18px;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  box-shadow: 0 8px 32px rgba(255,23,68,.5), 0 0 80px rgba(255,23,68,.25);
+  opacity: 0;
+  transition: opacity .35s, transform .35s cubic-bezier(.2,.9,.3,1);
+  max-width: 92vw;
+}
+#abReceivePrompt.on{ display: flex; opacity: 1; transform: translateX(-50%) scale(1); animation: abReceivePulse 1.6s ease-in-out infinite; }
+@keyframes abReceivePulse{
+  0%,100%{ box-shadow: 0 8px 32px rgba(255,23,68,.5), 0 0 60px rgba(255,23,68,.2); }
+  50%{ box-shadow: 0 12px 44px rgba(255,23,68,.65), 0 0 100px rgba(255,23,68,.4); }
+}
+.abr-icon{
+  width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(255,255,255,.22);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.abr-text{ display: flex; flex-direction: column; color: #fff; min-width: 0; }
+.abr-line1{ font-family: 'Cinzel Decorative', serif; font-size: 13px; letter-spacing: .04em; line-height: 1.2; }
+.abr-line2{ font-family: 'Orbitron', monospace; font-size: 9px; opacity: .85; letter-spacing: .15em; text-transform: uppercase; margin-top: 3px; }
+
+/* Receiver banner (while listening) */
+#abListenBanner{
+  margin: 0 10px;
+  padding: 8px 12px;
+  background: linear-gradient(90deg, rgba(0,229,160,.1), rgba(0,180,120,.06));
+  border: 1px solid rgba(0,229,160,.3);
+  border-left: 3px solid #00E5A0;
+  border-radius: 8px;
+  font-family: 'Orbitron', monospace;
+  font-size: 9.5px;
+  letter-spacing: .18em;
+  color: #B8F0D8;
+  text-transform: uppercase;
+  display: none;
+  align-items: center;
+  gap: 10px;
+}
+#abListenBanner.on{ display: flex; }
+.ab-listen-dot{
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #00E5A0; box-shadow: 0 0 6px #00E5A0;
+  animation: abDotPulse 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.ab-listen-text{ flex: 1; min-width: 0; }
+.ab-listen-vol{
+  display: flex; align-items: center; gap: 6px;
+}
+.ab-listen-vol input[type=range]{
+  width: 60px; accent-color: #00E5A0;
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       STATE — sender + receiver
+       ═══════════════════════════════════════════════════════════════ */
+    let _role = null;        /* 'sender' | 'receiver' | null */
+    let _pc = null;
+    let _localStream = null;
+    let _remoteAudio = null;
+    let _myUID = function(){
+      try{
+        if(typeof me !== 'undefined' && me && me.uid) return me.uid;
+      }catch(_){}
+      return 'anon-' + (window._spuranaSessionId || (window._spuranaSessionId = Math.random().toString(36).slice(2,10)));
+    };
+    let _myName = function(){
+      try{ if(typeof me !== 'undefined' && me) return me.name || 'Beloved'; }catch(_){}
+      return 'Beloved';
+    };
+
+    /* ═══════════════════════════════════════════════════════════════
+       SENDER — capture tab audio and broadcast
+       ═══════════════════════════════════════════════════════════════ */
+    async function _startBroadcast(){
+      if(_role === 'sender'){ _stopBroadcast(); return; }
+      /* Stop any active receive first */
+      if(_role === 'receiver') _stopReceive();
+
+      if(typeof db === 'undefined' || !db){
+        if(typeof toast === 'function') toast('Need to be online for broadcast');
+        return;
+      }
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+        if(typeof toast === 'function') toast('Audio broadcast works only on desktop browsers');
+        return;
+      }
+
+      /* Show instruction toast */
+      if(typeof toast === 'function') toast('Pick the tab playing music · TICK "Share tab audio"');
+
+      try{
+        /* getDisplayMedia requires video flag even though we only want audio */
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { width: 4, height: 4, frameRate: 1 },   /* tiny video, we discard it */
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+        const audioTracks = stream.getAudioTracks();
+        if(!audioTracks.length){
+          stream.getTracks().forEach(t => t.stop());
+          if(typeof toast === 'function') toast('No audio captured — make sure "Share tab audio" was ticked');
+          return;
+        }
+        /* Stop the video track immediately — we only need audio */
+        stream.getVideoTracks().forEach(t => t.stop());
+
+        _localStream = stream;
+        _role = 'sender';
+
+        /* Build a new PC dedicated to broadcast */
+        _pc = new RTCPeerConnection(_getRtcConfig());
+        audioTracks.forEach(t => _pc.addTrack(t, stream));
+
+        /* If the user stops sharing from browser's own UI, end gracefully */
+        audioTracks[0].onended = function(){
+          _stopBroadcast();
+        };
+
+        /* ICE candidates → Firebase */
+        _pc.onicecandidate = function(e){
+          if(e.candidate){
+            db.ref(BCAST_REF + '/iceFromSender').push(e.candidate.toJSON()).catch(()=>{});
+          }
+        };
+
+        /* Create offer */
+        const offer = await _pc.createOffer();
+        await _pc.setLocalDescription(offer);
+
+        /* Push offer + metadata to Firebase */
+        await db.ref(BCAST_REF).set({
+          offer: { type: offer.type, sdp: offer.sdp },
+          senderUID: _myUID(),
+          senderName: _myName(),
+          startedAt: Date.now()
+        });
+
+        /* Listen for receiver's answer */
+        const answerRef = db.ref(BCAST_REF + '/answer');
+        answerRef.on('value', function(snap){
+          const ans = snap.val();
+          if(ans && _pc && !_pc.currentRemoteDescription){
+            _pc.setRemoteDescription(new RTCSessionDescription(ans)).catch(err => console.warn('[Broadcast] setRemoteDescription failed:', err));
+          }
+        });
+
+        /* Listen for receiver's ICE candidates */
+        const iceRecvRef = db.ref(BCAST_REF + '/iceFromReceiver');
+        iceRecvRef.on('child_added', function(snap){
+          const c = snap.val();
+          if(c && _pc){
+            _pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
+          }
+        });
+
+        /* Show banner */
+        _showSenderBanner();
+        _updateBroadcastBtn(true);
+
+        if(typeof toast === 'function') toast('Broadcast started · waiting for BLACKWATER to join');
+      }catch(err){
+        console.warn('[Broadcast] start failed:', err);
+        if(err.name === 'NotAllowedError'){
+          if(typeof toast === 'function') toast('Broadcast cancelled');
+        } else {
+          if(typeof toast === 'function') toast('Broadcast failed: ' + (err.message || err.name));
+        }
+        _cleanupSender();
+      }
+    }
+
+    function _stopBroadcast(){
+      _cleanupSender();
+      _hideSenderBanner();
+      _updateBroadcastBtn(false);
+      if(typeof toast === 'function') toast('Broadcast stopped');
+    }
+
+    function _cleanupSender(){
+      if(_pc){ try{ _pc.close(); }catch(_){} _pc = null; }
+      if(_localStream){
+        try{ _localStream.getTracks().forEach(t => t.stop()); }catch(_){}
+        _localStream = null;
+      }
+      _role = null;
+      /* Clear the Firebase signaling node */
+      if(typeof db !== 'undefined' && db){
+        try{
+          db.ref(BCAST_REF + '/answer').off();
+          db.ref(BCAST_REF + '/iceFromReceiver').off();
+          db.ref(BCAST_REF).remove().catch(()=>{});
+        }catch(_){}
+      }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       RECEIVER — listen for incoming broadcasts
+       ═══════════════════════════════════════════════════════════════ */
+    let _incomingOffer = null;
+    let _incomingSenderName = null;
+
+    function _attachReceiverListener(){
+      if(typeof db === 'undefined' || !db) return;
+      db.ref(BCAST_REF).on('value', function(snap){
+        const data = snap.val();
+        if(!data || !data.offer){
+          /* Broadcast ended */
+          _hideReceivePrompt();
+          if(_role === 'receiver') _stopReceive();
+          return;
+        }
+        /* Ignore our own broadcast */
+        if(data.senderUID === _myUID()) return;
+        /* Already accepted? */
+        if(_role === 'receiver') return;
+        /* Show prompt */
+        _incomingOffer = data.offer;
+        _incomingSenderName = data.senderName || 'Partner';
+        _showReceivePrompt();
+      });
+    }
+
+    async function _acceptBroadcast(){
+      if(!_incomingOffer){ _hideReceivePrompt(); return; }
+      if(typeof db === 'undefined' || !db) return;
+
+      _hideReceivePrompt();
+      _role = 'receiver';
+
+      try{
+        _pc = new RTCPeerConnection(_getRtcConfig());
+
+        /* When remote audio track arrives → route to a hidden <audio> element */
+        _pc.ontrack = function(e){
+          if(e.streams && e.streams[0]){
+            _attachRemoteAudio(e.streams[0]);
+          } else if(e.track){
+            const s = new MediaStream();
+            s.addTrack(e.track);
+            _attachRemoteAudio(s);
+          }
+        };
+
+        /* ICE → Firebase */
+        _pc.onicecandidate = function(e){
+          if(e.candidate){
+            db.ref(BCAST_REF + '/iceFromReceiver').push(e.candidate.toJSON()).catch(()=>{});
+          }
+        };
+
+        /* Set remote description from sender's offer */
+        await _pc.setRemoteDescription(new RTCSessionDescription(_incomingOffer));
+
+        /* Create + send answer */
+        const answer = await _pc.createAnswer();
+        await _pc.setLocalDescription(answer);
+        await db.ref(BCAST_REF + '/answer').set({ type: answer.type, sdp: answer.sdp });
+
+        /* Listen for sender's ICE candidates */
+        const iceSenderRef = db.ref(BCAST_REF + '/iceFromSender');
+        iceSenderRef.on('child_added', function(snap){
+          const c = snap.val();
+          if(c && _pc){
+            _pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
+          }
+        });
+
+        _showListenBanner();
+        if(typeof toast === 'function') toast('Listening to ' + _incomingSenderName + '\'s broadcast');
+      }catch(err){
+        console.warn('[Broadcast] accept failed:', err);
+        if(typeof toast === 'function') toast('Failed to join broadcast');
+        _stopReceive();
+      }
+    }
+
+    function _stopReceive(){
+      if(_pc){ try{ _pc.close(); }catch(_){} _pc = null; }
+      if(_remoteAudio){
+        try{ _remoteAudio.pause(); _remoteAudio.srcObject = null; }catch(_){}
+      }
+      _role = null;
+      _hideListenBanner();
+      _hideReceivePrompt();
+      if(typeof db !== 'undefined' && db){
+        try{
+          db.ref(BCAST_REF + '/iceFromSender').off();
+        }catch(_){}
+      }
+    }
+
+    function _attachRemoteAudio(stream){
+      if(!_remoteAudio){
+        _remoteAudio = document.createElement('audio');
+        _remoteAudio.id = 'abRemoteAudio';
+        _remoteAudio.autoplay = true;
+        _remoteAudio.playsInline = true;
+        _remoteAudio.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0';
+        document.body.appendChild(_remoteAudio);
+      }
+      _remoteAudio.srcObject = stream;
+      _remoteAudio.play().catch(err => {
+        console.warn('[Broadcast] autoplay blocked, will play on next click:', err);
+        const onClick = function(){
+          if(_remoteAudio) _remoteAudio.play().catch(()=>{});
+          document.removeEventListener('click', onClick, { capture: true });
+        };
+        document.addEventListener('click', onClick, { capture: true, once: true });
+      });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       UI — banners + receive prompt + button injection
+       ═══════════════════════════════════════════════════════════════ */
+    function _ensureSenderBanner(){
+      let b = document.getElementById('abBanner');
+      if(b) return b;
+      b = document.createElement('div');
+      b.id = 'abBanner';
+      b.innerHTML = `
+        <span class="ab-banner-dot"></span>
+        <span class="ab-banner-text" id="abBannerText">📡 Broadcasting your audio</span>
+        <button class="ab-banner-stop" id="abStopBtn">Stop</button>
+      `;
+      /* Insert into the Listen Together bar body */
+      const body = document.querySelector('#ltBar .lt-bar-body');
+      if(body) body.insertBefore(b, body.firstChild);
+      else document.body.appendChild(b);
+      document.getElementById('abStopBtn').onclick = _stopBroadcast;
+      return b;
+    }
+    function _showSenderBanner(){
+      const b = _ensureSenderBanner();
+      const txt = document.getElementById('abBannerText');
+      if(txt) txt.textContent = '📡 Broadcasting your audio to partner';
+      b.classList.add('on');
+      /* Make sure the bar is open and expanded */
+      const bar = document.getElementById('ltBar');
+      if(bar){ bar.classList.add('on', 'expanded'); }
+    }
+    function _hideSenderBanner(){
+      const b = document.getElementById('abBanner');
+      if(b) b.classList.remove('on');
+    }
+
+    function _ensureListenBanner(){
+      let b = document.getElementById('abListenBanner');
+      if(b) return b;
+      b = document.createElement('div');
+      b.id = 'abListenBanner';
+      b.innerHTML = `
+        <span class="ab-listen-dot"></span>
+        <span class="ab-listen-text" id="abListenText">🎧 Listening to broadcast</span>
+        <div class="ab-listen-vol">
+          <span>VOL</span>
+          <input type="range" id="abVol" min="0" max="100" value="80">
+        </div>
+        <button class="ab-banner-stop" id="abReceiveStopBtn">Stop</button>
+      `;
+      const body = document.querySelector('#ltBar .lt-bar-body');
+      if(body) body.insertBefore(b, body.firstChild);
+      else document.body.appendChild(b);
+      document.getElementById('abReceiveStopBtn').onclick = _stopReceive;
+      document.getElementById('abVol').oninput = function(){
+        if(_remoteAudio) _remoteAudio.volume = parseInt(this.value, 10) / 100;
+      };
+      return b;
+    }
+    function _showListenBanner(){
+      const b = _ensureListenBanner();
+      const txt = document.getElementById('abListenText');
+      if(txt) txt.textContent = '🎧 Listening to ' + (_incomingSenderName || 'broadcast');
+      b.classList.add('on');
+      const bar = document.getElementById('ltBar');
+      if(bar){ bar.classList.add('on'); }
+    }
+    function _hideListenBanner(){
+      const b = document.getElementById('abListenBanner');
+      if(b) b.classList.remove('on');
+    }
+
+    function _ensureReceivePrompt(){
+      let el = document.getElementById('abReceivePrompt');
+      if(el) return el;
+      el = document.createElement('div');
+      el.id = 'abReceivePrompt';
+      el.innerHTML = `
+        <div class="abr-icon">📡</div>
+        <div class="abr-text">
+          <div class="abr-line1" id="abrLine1">Tap to hear ♪</div>
+          <div class="abr-line2" id="abrLine2">Partner is broadcasting</div>
+        </div>
+      `;
+      document.body.appendChild(el);
+      el.onclick = _acceptBroadcast;
+      return el;
+    }
+    function _showReceivePrompt(){
+      const el = _ensureReceivePrompt();
+      const l1 = document.getElementById('abrLine1');
+      const l2 = document.getElementById('abrLine2');
+      if(l1) l1.textContent = 'Tap to hear ♪';
+      if(l2) l2.textContent = (_incomingSenderName || 'Partner') + ' is broadcasting audio';
+      el.classList.add('on');
+    }
+    function _hideReceivePrompt(){
+      const el = document.getElementById('abReceivePrompt');
+      if(el) el.classList.remove('on');
+    }
+
+    function _updateBroadcastBtn(isLive){
+      const btn = document.getElementById('abBcastBtn');
+      if(!btn) return;
+      btn.classList.toggle('live', isLive);
+      btn.innerHTML = isLive ? '🔴 STOP BROADCAST' : '📡 BROADCAST AUDIO';
+    }
+
+    /* Inject button into the Listen Together quick-row */
+    function _injectButton(){
+      const row = document.getElementById('ltQuickRow');
+      if(!row || document.getElementById('abBcastBtn')) return false;
+      const btn = document.createElement('button');
+      btn.id = 'abBcastBtn';
+      btn.className = 'lt-quick-btn ab-bcast-btn';
+      btn.innerHTML = '📡 BROADCAST AUDIO';
+      btn.onclick = _startBroadcast;
+      /* Put it first */
+      row.insertBefore(btn, row.firstChild);
+      return true;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       INIT — wait for DB + UI, then attach
+       ═══════════════════════════════════════════════════════════════ */
+    let _initTries = 0;
+    const _initInterval = setInterval(function(){
+      _initTries++;
+      if(typeof db !== 'undefined' && db){
+        _attachReceiverListener();
+        clearInterval(_initInterval);
+      }
+      if(_initTries > 120) clearInterval(_initInterval);
+    }, 250);
+
+    /* Watch for the Listen Together bar to render, then inject our button */
+    if('MutationObserver' in window){
+      const obs = new MutationObserver(function(){
+        _injectButton();
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Public API
+       ═══════════════════════════════════════════════════════════════ */
+    window.startAudioBroadcast = _startBroadcast;
+    window.stopAudioBroadcast = function(){
+      if(_role === 'sender') _stopBroadcast();
+      else if(_role === 'receiver') _stopReceive();
+    };
+    window._audioBroadcast = {
+      role: function(){ return _role; },
+      isBroadcasting: function(){ return _role === 'sender'; },
+      isListening: function(){ return _role === 'receiver'; },
+      stop: window.stopAudioBroadcast
+    };
+
+    console.log('Spurana ✦ Audio Broadcast ready — share YOUR audio to partner via WebRTC. Desktop only. Tap 📡 BROADCAST AUDIO in Listen Together.');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  AUTO MODE — broadcast + sync without any prompts              ║
+     ║                                                                ║
+     ║  The "tap to hear" prompts were friction. This layer makes     ║
+     ║  the entire audio chain silent and automatic:                  ║
+     ║                                                                ║
+     ║   · Any click anywhere on the page silently primes audio       ║
+     ║     (one-time per session — browsers unlock the audio context  ║
+     ║     after the first user gesture)                              ║
+     ║                                                                ║
+     ║   · Broadcast: when partner sends an offer, we auto-accept     ║
+     ║     and play. No red prompt. Just a subtle status indicator    ║
+     ║     inside the Listen Together bar.                            ║
+     ║                                                                ║
+     ║   · Sync mode: when partner shares a track, we auto-load and   ║
+     ║     auto-play. The big "Tap to Hear" prompt is suppressed.     ║
+     ║                                                                ║
+     ║   · Subtle fallback: if autoplay genuinely fails (very rare    ║
+     ║     after page interaction), a tiny corner chip appears        ║
+     ║     instead of a big modal.                                    ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function ListenAutoMode(){
+    'use strict';
+
+    /* ═══════════════════════════════════════════════════════════════
+       CSS — subtle fallback chip + suppress big prompts
+       ═══════════════════════════════════════════════════════════════ */
+    if(!document.getElementById('autoModeStyles')){
+      const s = document.createElement('style');
+      s.id = 'autoModeStyles';
+      s.textContent = `
+/* Suppress the big "Tap to hear" prompts — they jolt the user */
+#ltTapToHear,
+#abReceivePrompt{
+  display: none !important;
+}
+/* Subtle fallback chip — bottom-right, only appears if autoplay genuinely fails */
+#ltAutoFallback{
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom,0) + 90px);
+  right: 14px;
+  z-index: 9050;
+  background: rgba(20,8,28,.92);
+  border: 1px solid rgba(0,229,160,.4);
+  border-radius: 999px;
+  padding: 8px 14px 8px 10px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 11px;
+  color: #B8F0D8;
+  letter-spacing: .04em;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .3s, transform .3s;
+}
+#ltAutoFallback.on{ display: flex; opacity: 1; transform: translateY(0); }
+.lt-fallback-dot{
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #00E5A0;
+  box-shadow: 0 0 6px #00E5A0;
+  animation: ltAutoDot 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes ltAutoDot{ 0%,100%{opacity:.5;transform:scale(.8)} 50%{opacity:1;transform:scale(1.15)} }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       1 · AUDIO PRIMING — silent unlock on first interaction
+       ═══════════════════════════════════════════════════════════════ */
+    let _audioPrimed = false;
+    let _primedElement = null;
+
+    function _primeAudio(){
+      if(_audioPrimed) return;
+      _audioPrimed = true;
+      try{
+        /* Create a hidden, primed audio element. Once .play() succeeds
+           after a user gesture, subsequent srcObject swaps will autoplay
+           because the element is in the "playing" state. */
+        const a = document.createElement('audio');
+        a.id = 'ltPrimedAudio';
+        a.muted = true;
+        a.autoplay = true;
+        a.playsInline = true;
+        a.setAttribute('playsinline','');
+        a.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none';
+        /* Tiny silent WAV data URI — half-second of silence */
+        a.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+        document.body.appendChild(a);
+        a.play().then(() => {
+          /* Audio context is now unlocked for this session */
+          a.muted = false;
+        }).catch(()=>{});
+        _primedElement = a;
+        /* Also unlock the Web Audio context */
+        try{
+          if(!window._ltAudioCtxPrimed){
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if(AC){
+              const ctx = new AC();
+              if(ctx.state === 'suspended') ctx.resume();
+              window._ltAudioCtxPrimed = ctx;
+            }
+          }
+        }catch(_){}
+        console.log('[AutoMode] Audio primed — autoplay unlocked for this session');
+      }catch(_){}
+    }
+
+    /* Capture ANY user interaction to unlock audio */
+    const events = ['click','touchstart','touchend','keydown','pointerdown','mousedown'];
+    events.forEach(ev => {
+      document.addEventListener(ev, _primeAudio, { capture: true, passive: true });
+    });
+
+    /* ═══════════════════════════════════════════════════════════════
+       2 · BROADCAST AUTO-ACCEPT
+       The existing AudioBroadcast module shows a big red prompt and
+       waits for click. We intercept that prompt, hide it, and trigger
+       acceptance automatically.
+       ═══════════════════════════════════════════════════════════════ */
+    function _autoAcceptBroadcast(){
+      const prompt = document.getElementById('abReceivePrompt');
+      if(!prompt || !prompt.classList.contains('on')) return;
+      /* Hide it visually (CSS already does this with display:none, but be safe) */
+      prompt.classList.remove('on');
+      prompt.style.display = 'none';
+      /* Trigger its click handler → runs _acceptBroadcast in the original module */
+      if(typeof prompt.onclick === 'function'){
+        try{ prompt.onclick(); }catch(err){ console.warn('[AutoMode] broadcast accept failed:', err); }
+      }
+    }
+
+    /* Watch for the prompt to appear */
+    if('MutationObserver' in window){
+      const obs = new MutationObserver(function(muts){
+        muts.forEach(m => {
+          if(m.type === 'attributes' && m.target.id === 'abReceivePrompt'){
+            if(m.target.classList.contains('on')){
+              setTimeout(_autoAcceptBroadcast, 50);
+            }
+          }
+          /* Also watch for it being added to DOM */
+          m.addedNodes && m.addedNodes.forEach(node => {
+            if(node.id === 'abReceivePrompt'){
+              const check = function(){
+                if(node.classList.contains('on')) setTimeout(_autoAcceptBroadcast, 50);
+              };
+              new MutationObserver(check).observe(node, { attributes: true, attributeFilter: ['class'] });
+              check();
+            }
+          });
+        });
+      });
+      obs.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class']
+      });
+    }
+
+    /* Also catch it via polling as belt-and-suspenders */
+    setInterval(function(){
+      const prompt = document.getElementById('abReceivePrompt');
+      if(prompt && prompt.classList.contains('on')){
+        _autoAcceptBroadcast();
+      }
+    }, 500);
+
+    /* ═══════════════════════════════════════════════════════════════
+       3 · SYNC MODE AUTO-PLAY (Listen Together)
+       The existing LT module loads tracks but autoplay might fail.
+       Force-call play() on every YT/audio/Spotify player after each
+       partner-triggered load, and on each playback_update.
+       ═══════════════════════════════════════════════════════════════ */
+    function _forceLocalPlay(){
+      /* HTML5 audio in Listen Together bar */
+      const a = document.getElementById('ltAudio');
+      if(a && a.paused){
+        a.play().catch(()=>{});
+      }
+      /* YouTube player */
+      try{
+        if(window._listenTogether && typeof window._listenTogether.state === 'function'){
+          const st = window._listenTogether.state();
+          if(st && st.type === 'yt' && st.player && typeof st.player.playVideo === 'function'){
+            const ps = st.player.getPlayerState && st.player.getPlayerState();
+            if(ps !== 1) st.player.playVideo();
+          }
+        }
+      }catch(_){}
+      /* Spotify — has its own controller, accessible via window globals */
+      /* We can't reliably access Spotify controller from here; it auto-plays
+         on the embed itself once the user has primed audio. */
+    }
+
+    /* When Firebase fires a partner state update, schedule a play attempt */
+    let _lastStateForcePlay = 0;
+    function _attachSyncListener(){
+      if(typeof db === 'undefined' || !db) return false;
+      if(window._ltAutoSyncAttached) return true;
+      window._ltAutoSyncAttached = true;
+      db.ref('shared/listen_session').on('value', function(snap){
+        const state = snap.val();
+        if(!state) return;
+        const myUID = (function(){
+          try{ if(typeof me !== 'undefined' && me && me.uid) return me.uid; }catch(_){}
+          return null;
+        })();
+        if(state.lastBy === myUID) return; /* our own echo */
+        if(!state.isPlaying) return;
+        /* Wait a beat for the LT module to load the track, then force play */
+        const now = Date.now();
+        if(now - _lastStateForcePlay < 500) return; /* debounce */
+        _lastStateForcePlay = now;
+        setTimeout(_forceLocalPlay, 300);
+        setTimeout(_forceLocalPlay, 800);
+        setTimeout(_forceLocalPlay, 1500);
+      });
+      return true;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       4 · SUBTLE FALLBACK CHIP — only if autoplay GENUINELY fails
+       ═══════════════════════════════════════════════════════════════ */
+    function _ensureFallbackChip(){
+      let chip = document.getElementById('ltAutoFallback');
+      if(chip) return chip;
+      chip = document.createElement('div');
+      chip.id = 'ltAutoFallback';
+      chip.innerHTML = '<span class="lt-fallback-dot"></span><span>Music waiting · tap</span>';
+      chip.onclick = function(){
+        _primeAudio();
+        _forceLocalPlay();
+        _autoAcceptBroadcast();
+        chip.classList.remove('on');
+      };
+      document.body.appendChild(chip);
+      return chip;
+    }
+    function _showFallbackChip(){
+      _ensureFallbackChip().classList.add('on');
+    }
+    function _hideFallbackChip(){
+      const c = document.getElementById('ltAutoFallback');
+      if(c) c.classList.remove('on');
+    }
+
+    /* Detect: after a partner shares a track, is audio actually playing
+       on our side a few seconds later? If not, show the fallback chip. */
+    function _verifyAudioPlaying(){
+      let isPlaying = false;
+      try{
+        const a = document.getElementById('ltAudio');
+        if(a && !a.paused) isPlaying = true;
+        if(!isPlaying && window._listenTogether && typeof window._listenTogether.state === 'function'){
+          const st = window._listenTogether.state();
+          if(st && st.type === 'yt' && st.player && st.player.getPlayerState && st.player.getPlayerState() === 1){
+            isPlaying = true;
+          }
+        }
+        /* Broadcast receiver audio */
+        const remote = document.getElementById('abRemoteAudio');
+        if(remote && !remote.paused && remote.srcObject) isPlaying = true;
+      }catch(_){}
+      return isPlaying;
+    }
+
+    /* On every partner state update, check 3 seconds later if audio is going */
+    if(typeof db !== 'undefined' && db){
+      _attachSyncListener();
+    } else {
+      let tries = 0;
+      const t = setInterval(function(){
+        tries++;
+        if(_attachSyncListener() || tries > 120) clearInterval(t);
+      }, 300);
+    }
+
+    /* Periodic check — only show fallback if we have a partner playing AND we're not */
+    setInterval(function(){
+      try{
+        const lastState = window._lastSeenLTState;
+        if(window._listenTogether && window._listenTogether.state){
+          const localState = window._listenTogether.state();
+          if(localState && localState.url){
+            /* We have a track loaded */
+            const playing = _verifyAudioPlaying();
+            const broadcastActive = window._audioBroadcast && window._audioBroadcast.isListening && window._audioBroadcast.isListening();
+            if(!playing && !broadcastActive){
+              /* Check if partner is currently playing — if so, we should be too */
+              if(typeof db !== 'undefined' && db){
+                db.ref('shared/listen_session').once('value').then(function(snap){
+                  const st = snap.val();
+                  if(!st) return;
+                  const myUID = (function(){ try{ return me && me.uid; }catch(_){ return null; } })();
+                  if(st.isPlaying && st.lastBy !== myUID){
+                    /* Partner is playing, we're not — show fallback */
+                    if(!_audioPrimed) _showFallbackChip();
+                    else {
+                      /* Audio IS primed, just kick the player */
+                      _forceLocalPlay();
+                      setTimeout(() => {
+                        if(!_verifyAudioPlaying()) _showFallbackChip();
+                      }, 1000);
+                    }
+                  }
+                }).catch(()=>{});
+              }
+            } else {
+              _hideFallbackChip();
+            }
+          }
+        }
+      }catch(_){}
+    }, 4000);
+
+    /* ═══════════════════════════════════════════════════════════════
+       5 · Public — for debugging
+       ═══════════════════════════════════════════════════════════════ */
+    window._ltAuto = {
+      isPrimed: function(){ return _audioPrimed; },
+      forcePrime: _primeAudio,
+      forcePlay: _forceLocalPlay,
+      showFallback: _showFallbackChip,
+      hideFallback: _hideFallbackChip
+    };
+
+    console.log('Spurana ✦ Listen Auto Mode — silent priming, auto-accept, auto-play. No prompts. _ltAuto.isPrimed() to check status.');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  YOUTUBE MUSIC + FILE:// PROTOCOL FIX                          ║
+     ║                                                                ║
+     ║  Two problems caught in the wild:                              ║
+     ║                                                                ║
+     ║   1 · YouTube Music URLs (music.youtube.com/...) don't always  ║
+     ║       work with the regular YouTube embed. Solution: rewrite   ║
+     ║       to www.youtube.com URL transparently. Most tracks work   ║
+     ║       — those that don't (YT Music exclusives) get a clear     ║
+     ║       fallback message with an "Open on YouTube Music" button. ║
+     ║                                                                ║
+     ║   2 · The YouTube IFrame API can't initialize from file://     ║
+     ║       URLs. Browser sandboxing blocks the postMessage handshake║
+     ║       between the embed iframe and our page. Result: the       ║
+     ║       embed loads forever with no ready event.                 ║
+     ║                                                                ║
+     ║       Fix: a 7-second watchdog detects this and shows a clear  ║
+     ║       fallback UI with a direct YouTube link.                  ║
+     ║                                                                ║
+     ║   3 · Subtle file:// warning on first try (so the user knows   ║
+     ║       deployment is required for full functionality).          ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function YouTubeMusicFix(){
+    'use strict';
+
+    /* ═══════════════════════════════════════════════════════════════
+       CSS — fallback UI inside the player host
+       ═══════════════════════════════════════════════════════════════ */
+    if(!document.getElementById('ytFixStyles')){
+      const s = document.createElement('style');
+      s.id = 'ytFixStyles';
+      s.textContent = `
+.yt-fallback{
+  width: 100%;
+  min-height: 152px;
+  background: linear-gradient(135deg, rgba(40,12,32,.7), rgba(15,8,22,.85));
+  border: 1px solid rgba(255,107,157,.25);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+}
+.yt-fallback-emoji{ font-size: 32px; opacity: .9; }
+.yt-fallback-title{
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 14px;
+  color: #F2EBF8;
+  letter-spacing: .04em;
+}
+.yt-fallback-msg{
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 12.5px;
+  color: rgba(255,184,208,.75);
+  line-height: 1.5;
+  max-width: 380px;
+}
+.yt-fallback-actions{ display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.yt-fallback-btn{
+  padding: 8px 14px;
+  border: 1px solid rgba(232,0,154,.4);
+  background: rgba(232,0,154,.1);
+  border-radius: 999px;
+  color: #FFD0DE;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.yt-fallback-btn:hover{ background: rgba(232,0,154,.22); border-color: rgba(232,0,154,.7); }
+.yt-fallback-btn.primary{
+  background: linear-gradient(135deg, #E8009A, #8B0052);
+  border: none;
+  color: #fff;
+}
+.protocol-warn-toast{
+  position: fixed;
+  top: calc(env(safe-area-inset-top,0) + 16px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-30px);
+  z-index: 99990;
+  background: linear-gradient(135deg, rgba(255,168,38,.95), rgba(200,120,20,.95));
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 12px;
+  letter-spacing: .04em;
+  box-shadow: 0 8px 30px rgba(0,0,0,.5);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 92vw;
+  opacity: 0;
+  transition: all .4s cubic-bezier(.2,.9,.3,1);
+}
+.protocol-warn-toast.on{ opacity: 1; transform: translateX(-50%) translateY(0); }
+.protocol-warn-toast .pw-close{
+  background: rgba(0,0,0,.18);
+  border: none;
+  border-radius: 50%;
+  width: 22px; height: 22px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       1 · URL NORMALIZATION
+       Rewrite YouTube Music / mobile / share URLs to canonical form
+       ═══════════════════════════════════════════════════════════════ */
+    function _normalizeYouTubeURL(url){
+      if(!url || typeof url !== 'string') return url;
+      let u = url.trim();
+      /* YouTube Music → regular YouTube */
+      u = u.replace(/https?:\/\/music\.youtube\.com\/watch/i, 'https://www.youtube.com/watch');
+      /* Mobile YouTube → www */
+      u = u.replace(/https?:\/\/m\.youtube\.com/i, 'https://www.youtube.com');
+      /* Strip si= and other tracking params that confuse some parsers */
+      try{
+        const parsed = new URL(u);
+        if(/youtube\.com$/.test(parsed.hostname) || /youtube\.com$/.test(parsed.hostname.replace(/^www\./,''))){
+          const v = parsed.searchParams.get('v');
+          const t = parsed.searchParams.get('t') || parsed.searchParams.get('start');
+          if(v){
+            /* Rebuild a clean URL */
+            let clean = 'https://www.youtube.com/watch?v=' + v;
+            if(t) clean += '&t=' + t;
+            return clean;
+          }
+        }
+        /* youtu.be short URLs */
+        if(parsed.hostname === 'youtu.be'){
+          const id = parsed.pathname.replace(/^\//, '').split('/')[0];
+          if(id) return 'https://www.youtube.com/watch?v=' + id;
+        }
+      }catch(_){}
+      return u;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       2 · WATCHDOG — detect YT player that never becomes ready
+       ═══════════════════════════════════════════════════════════════ */
+    function _showFallback(hostEl, originalUrl, reason){
+      if(!hostEl) return;
+      const isFile = window.location.protocol === 'file:';
+      const isYTMusic = /music\.youtube\.com/.test(originalUrl);
+      const ytSearchUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(originalUrl);
+      let title = 'Track unavailable';
+      let msg = 'The video couldn\'t load in the embed.';
+      if(isFile){
+        title = 'Embed blocked on local file';
+        msg = 'YouTube\'s embed can\'t load from a local file. Deploy to Vercel and open the live URL — playback works perfectly there.';
+      } else if(isYTMusic){
+        title = 'YouTube Music exclusive';
+        msg = 'This track may be a YouTube Music exclusive that isn\'t embeddable. Try a regular YouTube link, or open the original.';
+      }
+      hostEl.innerHTML = `
+        <div class="yt-fallback">
+          <div class="yt-fallback-emoji">🎧</div>
+          <div class="yt-fallback-title">${title}</div>
+          <div class="yt-fallback-msg">${msg}</div>
+          <div class="yt-fallback-actions">
+            <a href="${originalUrl}" target="_blank" rel="noopener" class="yt-fallback-btn primary">Open Original ↗</a>
+            <a href="${ytSearchUrl}" target="_blank" rel="noopener" class="yt-fallback-btn">Search YouTube</a>
+          </div>
+        </div>
+      `;
+      const status = document.getElementById('ltStatusText');
+      if(status) status.textContent = isFile ? 'Embed blocked (local file)' : 'Track not embeddable';
+    }
+
+    function _armWatchdog(){
+      /* Watch for new YT player div appearing — if it doesn't show video
+         within 7s, replace with fallback */
+      if('MutationObserver' in window){
+        const obs = new MutationObserver(function(muts){
+          muts.forEach(m => {
+            m.addedNodes && m.addedNodes.forEach(node => {
+              if(node && node.id === 'ltYtPlayer'){
+                _watchPlayer(node);
+              } else if(node && node.querySelector){
+                const yp = node.querySelector('#ltYtPlayer');
+                if(yp) _watchPlayer(yp);
+              }
+            });
+          });
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+      }
+    }
+
+    function _watchPlayer(playerDiv){
+      const host = document.getElementById('ltPlayerHost');
+      const currentUrl = (function(){
+        try{
+          if(window._listenTogether && window._listenTogether.state){
+            return window._listenTogether.state().url || '';
+          }
+        }catch(_){}
+        const inp = document.getElementById('ltInp');
+        return inp ? inp.value : '';
+      })();
+
+      /* If we're on file:// — show the warning toast immediately */
+      if(window.location.protocol === 'file:'){
+        _showProtocolWarning();
+      }
+
+      /* Watchdog: after 7 seconds, check if a real iframe with video content
+         appeared. If not, show fallback. */
+      setTimeout(function(){
+        try{
+          /* If the player is now an iframe AND it's been "ready" (status text
+             updated to Live · Synced), we're good */
+          const status = document.getElementById('ltStatusText');
+          const statusOk = status && /live|synced/i.test(status.textContent);
+          /* Check if iframe exists and seems loaded */
+          const iframe = playerDiv.querySelector ? playerDiv.querySelector('iframe') : null;
+          if(statusOk && iframe) return; /* All good */
+          /* Player didn't ready in time — show fallback */
+          _showFallback(host, currentUrl, 'timeout');
+        }catch(_){}
+      }, 7000);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       3 · PROTOCOL WARNING — gentle toast when on file://
+       ═══════════════════════════════════════════════════════════════ */
+    let _warningShown = false;
+    function _showProtocolWarning(){
+      if(_warningShown) return;
+      if(window.location.protocol !== 'file:') return;
+      _warningShown = true;
+      try{
+        /* Don't show again this session */
+        if(sessionStorage.getItem('spurana_proto_warned')) return;
+        sessionStorage.setItem('spurana_proto_warned', '1');
+      }catch(_){}
+      const t = document.createElement('div');
+      t.className = 'protocol-warn-toast';
+      t.innerHTML = `
+        <span>⚠ Local file mode — deploy to Vercel for full audio/video sync</span>
+        <button class="pw-close" title="Dismiss">✕</button>
+      `;
+      document.body.appendChild(t);
+      t.querySelector('.pw-close').onclick = function(){ t.classList.remove('on'); setTimeout(()=>t.remove(), 400); };
+      setTimeout(()=>t.classList.add('on'), 100);
+      /* Auto-dismiss after 8 seconds */
+      setTimeout(()=>{ if(t.parentNode){ t.classList.remove('on'); setTimeout(()=>t.remove(), 400); }}, 8000);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       4 · WRAP _listenTogether.load — normalize URL before processing
+       ═══════════════════════════════════════════════════════════════ */
+    function _wrapLoad(){
+      if(!window._listenTogether || typeof window._listenTogether.load !== 'function'){
+        return false;
+      }
+      if(window._listenTogether.load.__normalized) return true;
+      const orig = window._listenTogether.load;
+      window._listenTogether.load = function(url, initialState){
+        const normalized = _normalizeYouTubeURL(url);
+        if(normalized !== url){
+          console.log('[YT Fix] Normalized URL:', url, '→', normalized);
+          /* Update the input field too */
+          const inp = document.getElementById('ltInp');
+          if(inp && inp.value === url) inp.value = normalized;
+        }
+        return orig.call(this, normalized, initialState);
+      };
+      window._listenTogether.load.__normalized = true;
+      return true;
+    }
+
+    /* Also wrap the Load button + Enter key handler so normalization
+       happens at input time too */
+    function _wrapLoadButton(){
+      const btn = document.getElementById('ltLoadBtn');
+      const inp = document.getElementById('ltInp');
+      if(!btn || !inp) return false;
+      if(btn.__normalized) return true;
+      btn.__normalized = true;
+      const origClick = btn.onclick;
+      btn.onclick = function(e){
+        if(inp.value){
+          inp.value = _normalizeYouTubeURL(inp.value);
+        }
+        if(origClick) return origClick.call(this, e);
+      };
+      const origKey = inp.onkeydown;
+      inp.addEventListener('keydown', function(e){
+        if(e.key === 'Enter'){
+          inp.value = _normalizeYouTubeURL(inp.value);
+        }
+      }, true);
+      return true;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       INIT
+       ═══════════════════════════════════════════════════════════════ */
+    _armWatchdog();
+
+    /* Wait briefly for Listen Together to be ready, then wrap */
+    let _tries = 0;
+    const _t = setInterval(function(){
+      _tries++;
+      const a = _wrapLoad();
+      const b = _wrapLoadButton();
+      if((a && b) || _tries > 60) clearInterval(_t);
+    }, 250);
+
+    /* Watch for the bar to appear, then re-wrap the button (it may re-render) */
+    if('MutationObserver' in window){
+      const obs2 = new MutationObserver(function(){
+        _wrapLoadButton();
+      });
+      obs2.observe(document.body, { childList: true, subtree: true });
+    }
+
+    /* If we're on file://, show the warning toast on first load */
+    if(window.location.protocol === 'file:'){
+      setTimeout(_showProtocolWarning, 2000);
+    }
+
+    /* Public for debugging */
+    window._ytFix = {
+      normalize: _normalizeYouTubeURL,
+      protocol: function(){ return window.location.protocol; }
+    };
+
+    console.log('Spurana ✦ YouTube Music + file:// fix — URL normalization, 7s watchdog, fallback UI. Use _ytFix.normalize(url) to test.');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  MOBILE FITNESS 2 — make every screen feel native on phone     ║
+     ║                                                                ║
+     ║  Builds on the original MobileFitness with comprehensive UX    ║
+     ║  hardening for every interactive surface. Specifically:        ║
+     ║                                                                ║
+     ║   1 · ALL buttons / tappable elements ≥ 44×44px (Apple HIG)    ║
+     ║   2 · ALL inputs ≥ 16px font (prevents iOS auto-zoom)          ║
+     ║   3 · Safe-area-inset respected for top notch + bottom home    ║
+     ║   4 · Tap-highlight color killed app-wide                      ║
+     ║   5 · Touch-action manipulation removes 300ms double-tap delay ║
+     ║   6 · Momentum scrolling on every scrollable area              ║
+     ║   7 · Composer rises with keyboard via visualViewport          ║
+     ║   8 · Long-press text-selection blocked on UI chrome           ║
+     ║   9 · All modals full-viewport on small screens                ║
+     ║  10 · Pull-to-refresh disabled on app shell (chat stays put)   ║
+     ║  11 · Horizontal scroll prevented at body level                ║
+     ║  12 · Animations reduced when user prefers-reduced-motion      ║
+     ║  13 · Sanctuary doors stack 2-col then 1-col on phone          ║
+     ║  14 · FABs lifted above iOS home indicator                     ║
+     ║  15 · Landscape phone gets compact layout hint                 ║
+     ║  16 · Better tap feedback (subtle scale on press)              ║
+     ║  17 · Address-bar resize handled via visualViewport            ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function MobileFitness2(){
+    'use strict';
+
+    /* ═══════════════════════════════════════════════════════════════
+       VIEWPORT META — make sure it's set right for mobile
+       ═══════════════════════════════════════════════════════════════ */
+    function _fixViewport(){
+      let vm = document.querySelector('meta[name="viewport"]');
+      if(!vm){
+        vm = document.createElement('meta');
+        vm.name = 'viewport';
+        document.head.appendChild(vm);
+      }
+      /* viewport-fit=cover enables safe-area-inset on iOS notch devices.
+         user-scalable=yes preserves accessibility (zoom for low-vision users).
+         interactive-widget=resizes-content makes keyboard push content up. */
+      vm.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover, interactive-widget=resizes-content';
+
+      /* Theme color matches the cosmic backdrop */
+      let tc = document.querySelector('meta[name="theme-color"]');
+      if(!tc){
+        tc = document.createElement('meta');
+        tc.name = 'theme-color';
+        document.head.appendChild(tc);
+      }
+      tc.content = '#06040c';
+
+      /* iOS status bar style */
+      let sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if(!sb){
+        sb = document.createElement('meta');
+        sb.name = 'apple-mobile-web-app-status-bar-style';
+        document.head.appendChild(sb);
+      }
+      sb.content = 'black-translucent';
+
+      let cap = document.querySelector('meta[name="apple-mobile-web-app-capable"]');
+      if(!cap){
+        cap = document.createElement('meta');
+        cap.name = 'apple-mobile-web-app-capable';
+        cap.content = 'yes';
+        document.head.appendChild(cap);
+      }
+
+      let foreColor = document.querySelector('meta[name="format-detection"]');
+      if(!foreColor){
+        foreColor = document.createElement('meta');
+        foreColor.name = 'format-detection';
+        foreColor.content = 'telephone=no'; /* don't auto-link phone numbers */
+        document.head.appendChild(foreColor);
+      }
+    }
+    _fixViewport();
+
+    /* ═══════════════════════════════════════════════════════════════
+       CSS — comprehensive mobile-first override
+       ═══════════════════════════════════════════════════════════════ */
+    if(!document.getElementById('mf2Styles')){
+      const s = document.createElement('style');
+      s.id = 'mf2Styles';
+      s.textContent = `
+/* ════════ APP SHELL ════════ */
+html, body {
+  /* Prevent horizontal scroll at root */
+  overflow-x: hidden !important;
+  /* Use dynamic viewport height — accounts for mobile browser chrome */
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Disable pull-to-refresh — chat shouldn't refresh on swipe */
+  overscroll-behavior-y: contain;
+  /* Better text rendering on mobile */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* No tap highlight color anywhere */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* No tap highlight on ANY element — we provide our own feedback */
+*, *::before, *::after {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ════════ TOUCH TARGETS — Apple HIG: 44×44 minimum ════════ */
+button,
+.btn,
+.fbtn,
+[role="button"],
+a.button,
+.lt-quick-btn,
+.lt-bar-btn,
+.lt-load,
+.ab-bcast-btn,
+.hc-flow-btn,
+.hc-card,
+.hc-mode-btn,
+.hc-back,
+.hc-close,
+.awj-card,
+.awj-flow-btn,
+.gs-toggle,
+.gs-close,
+.sa-close,
+.ml-close,
+.feat-close,
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  min-width: 44px;
+  min-height: 44px;
+  /* No 300ms double-tap delay */
+  touch-action: manipulation;
+  /* No text selection on buttons (causes long-press menu) */
+  -webkit-user-select: none;
+  user-select: none;
+  /* Smooth tap feedback */
+  transition: transform 0.1s ease-out, opacity 0.15s;
+}
+
+/* Subtle tap feedback — micro-scale on press */
+button:active,
+.btn:active,
+.fbtn:active,
+.lt-bar-btn:active,
+.lt-quick-btn:active,
+.hc-flow-btn:active,
+.hc-card:active,
+.awj-card:active {
+  transform: scale(0.97);
+}
+
+/* ════════ INPUTS — prevent iOS auto-zoom ════════ */
+input,
+textarea,
+select {
+  /* CRITICAL: 16px or larger prevents iOS Safari from zooming on focus */
+  font-size: 16px !important;
+  /* Smooth momentum scroll inside textareas */
+  -webkit-overflow-scrolling: touch;
+  /* Better appearance on iOS */
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 8px;
+}
+
+/* Restore inputs that intentionally need smaller text on desktop only */
+@media (min-width: 769px) {
+  input.small,
+  textarea.small,
+  .small-input {
+    font-size: 14px !important;
+  }
+}
+
+/* ════════ SCROLLABLE AREAS — momentum scrolling ════════ */
+.scrollable,
+[class*="-list"],
+[class*="-grid"],
+[class*="-body"],
+#msgs,
+#hcModal,
+#awjModal,
+#globalSettingsModal,
+.feat-modal,
+.sa-modal {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* ════════ SAFE AREAS — handle notch + home indicator ════════ */
+.top-bar,
+#ctbHead,
+.top-left,
+.top-right {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 6px);
+  padding-left: max(env(safe-area-inset-left, 0px), 12px);
+  padding-right: max(env(safe-area-inset-right, 0px), 12px);
+}
+
+#inputZone,
+.input-zone,
+.composer,
+.chat-composer {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+  padding-left: max(env(safe-area-inset-left, 0px), 8px);
+  padding-right: max(env(safe-area-inset-right, 0px), 8px);
+}
+
+/* FABs always above the iOS home indicator */
+.fab,
+.fab-cluster,
+[class*="-fab"],
+#doorsFab,
+#divineWidget {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px) !important;
+}
+
+/* ════════ MEDIA SAFETY — never overflow ════════ */
+img, video, iframe, embed, object {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Inside chat bubbles, media respects width */
+.msg-row img,
+.msg-row video,
+.bubble img,
+.bubble video {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* ════════ MODALS — full viewport on mobile ════════ */
+@media (max-width: 768px) {
+  #globalSettingsModal,
+  #medLibModal,
+  #roomsModal,
+  #voiceSettingsModal,
+  #hcModal,
+  #hcDetail,
+  #hcFlow,
+  #hcStats,
+  #awjModal,
+  #awjDetail,
+  #awjFlow,
+  #awjPortal,
+  .feat-modal,
+  .sa-modal {
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-width: none !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    padding-top: env(safe-area-inset-top, 0) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0) !important;
+  }
+}
+
+/* ════════ TYPOGRAPHY — readable on small screens ════════ */
+body {
+  /* Better line-height on mobile */
+  line-height: 1.5;
+}
+
+/* Long words like URLs break properly */
+.msg-row,
+.bubble,
+.lt-bar-title,
+.hc-card-name,
+.awj-card-name,
+.gs-item {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Block long-press menus on UI chrome (still allowed on chat text) */
+.top-bar,
+#ctbHead,
+.env-strip,
+.mode-strip,
+.fab,
+.fab-cluster,
+.lt-bar-head,
+.hc-head,
+.awj-head,
+button,
+.btn {
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* Chat messages stay selectable for copy */
+.msg-row,
+.bubble,
+.msg-text,
+.message-content {
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
+  user-select: text;
+}
+
+/* ════════ DOORS GRID — 2 cols on phone, 1 col on tiny phone ════════ */
+@media (max-width: 600px) {
+  .doors-grid,
+  .door-realm-grid,
+  [class*="doors-grid"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+}
+@media (max-width: 380px) {
+  .doors-grid,
+  .door-realm-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Heart-Centred + Awakening cards — single column on phone */
+@media (max-width: 520px) {
+  .hc-grid,
+  .awj-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+}
+
+/* ════════ KEYBOARD-AWARE COMPOSER ════════ */
+/* When keyboard opens, --kb-offset is set by JS — composer lifts */
+:root {
+  --kb-offset: 0px;
+}
+#inputZone,
+.input-zone,
+.composer {
+  bottom: var(--kb-offset, 0) !important;
+  transition: bottom 0.25s ease-out;
+}
+
+/* ════════ ANIMATIONS — respect reduced-motion ════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ════════ LANDSCAPE PHONE — compact layout ════════ */
+@media (max-height: 480px) and (orientation: landscape) {
+  .hc-detail-orb,
+  .awj-detail-orb {
+    width: 80px !important;
+    height: 80px !important;
+    font-size: 32px !important;
+  }
+  .hc-detail-name,
+  .awj-detail-name {
+    font-size: 18px !important;
+  }
+  .hc-detail-desc,
+  .awj-detail-desc {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+  }
+  .hc-phase-icon,
+  .awj-step-icon {
+    width: 80px !important;
+    height: 80px !important;
+    font-size: 32px !important;
+  }
+}
+
+/* ════════ TINY PHONES (≤360px width) ════════ */
+@media (max-width: 360px) {
+  .top-bar,
+  #ctbHead {
+    padding: env(safe-area-inset-top, 0) 8px 0 !important;
+  }
+  .lt-bar-title,
+  .hc-card-name,
+  .awj-card-name {
+    font-size: 12px !important;
+  }
+  .lt-quick-btn,
+  .lt-load {
+    padding: 8px 10px !important;
+    font-size: 10px !important;
+  }
+}
+
+/* ════════ SCROLLBAR — slimmer on mobile ════════ */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(232, 0, 154, 0.3);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-track { background: transparent; }
+}
+
+/* ════════ FOCUS RINGS — visible but not jarring ════════ */
+button:focus-visible,
+.btn:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgba(232, 0, 154, 0.5);
+  outline-offset: 2px;
+}
+/* Suppress focus rings on mouse interaction */
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ════════ DEITY ORBS — slightly smaller on tiny phones ════════ */
+@media (max-width: 380px) {
+  .deity-orb {
+    width: 38px !important;
+    height: 38px !important;
+  }
+}
+
+/* ════════ ENV STRIP — scrollable, no clipping ════════ */
+.env-strip,
+.mode-strip {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+}
+.env-strip::-webkit-scrollbar,
+.mode-strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* ════════ TOOLTIPS — disable on touch devices ════════ */
+@media (hover: none) {
+  [title]::after,
+  [data-tooltip]::after {
+    display: none !important;
+  }
+}
+
+/* ════════ LOADING / DISABLED STATE ════════ */
+.loading,
+[aria-busy="true"] {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* ════════ CHAT BUBBLES — better mobile sizing ════════ */
+@media (max-width: 520px) {
+  .msg-row {
+    max-width: 88vw !important;
+  }
+  .bubble {
+    max-width: 100% !important;
+  }
+}
+
+/* ════════ FAB CLUSTER — no overlap with composer ════════ */
+@media (max-width: 600px) {
+  .fab-cluster,
+  #fabCluster {
+    bottom: calc(env(safe-area-inset-bottom, 0) + 80px) !important;
+  }
+}
+
+/* ════════ LISTEN TOGETHER bar — phone safety ════════ */
+@media (max-width: 520px) {
+  #ltBar {
+    width: calc(100vw - 12px) !important;
+    max-width: none !important;
+    top: calc(env(safe-area-inset-top, 0) + 64px) !important;
+  }
+  #ltChip {
+    top: calc(env(safe-area-inset-top, 0) + 64px) !important;
+    max-width: 88vw !important;
+  }
+}
+
+/* ════════ DESKTOP HOVER STATES — disable on touch ════════ */
+@media (hover: none) {
+  .hc-card:hover,
+  .awj-card:hover,
+  .lt-quick-btn:hover,
+  button:hover {
+    transform: none !important;
+  }
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       KEYBOARD HANDLER — composer rises with keyboard
+       Uses visualViewport API (modern browsers)
+       ═══════════════════════════════════════════════════════════════ */
+    function _attachKeyboardHandler(){
+      if(!window.visualViewport) return;
+      const vv = window.visualViewport;
+      let lastOffset = 0;
+      function update(){
+        /* Difference between layout viewport and visual viewport tells us
+           if keyboard is open */
+        const heightDiff = window.innerHeight - vv.height;
+        const offset = heightDiff > 100 ? heightDiff : 0;
+        if(offset !== lastOffset){
+          lastOffset = offset;
+          document.documentElement.style.setProperty('--kb-offset', offset + 'px');
+          /* Scroll active input into view */
+          if(offset > 0 && document.activeElement){
+            try{ document.activeElement.scrollIntoView({ block: 'center', behavior: 'smooth' }); }catch(_){}
+          }
+        }
+      }
+      vv.addEventListener('resize', update);
+      vv.addEventListener('scroll', update);
+      update();
+    }
+    _attachKeyboardHandler();
+
+    /* ═══════════════════════════════════════════════════════════════
+       BLUR ON ESCAPE — let users dismiss keyboard
+       ═══════════════════════════════════════════════════════════════ */
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && document.activeElement && document.activeElement.blur){
+        if(['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)){
+          document.activeElement.blur();
+        }
+      }
+    });
+
+    /* ═══════════════════════════════════════════════════════════════
+       PREVENT ACCIDENTAL DOUBLE-TAP ZOOM on UI elements
+       ═══════════════════════════════════════════════════════════════ */
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', function(e){
+      const now = Date.now();
+      if(now - lastTouchEnd <= 350){
+        const tgt = e.target;
+        /* Allow double-tap on images (zoom), inputs (text selection),
+           and chat content. Block on UI chrome. */
+        if(tgt && tgt.closest && !tgt.closest('img, video, .msg-row, .bubble, input, textarea, [contenteditable]')){
+          if(tgt.closest('button, .btn, .fbtn, [role="button"], .fab, .lt-bar-btn, .lt-quick-btn, .hc-card, .awj-card, .top-bar, #ctbHead, .env-strip, .mode-strip')){
+            e.preventDefault();
+          }
+        }
+      }
+      lastTouchEnd = now;
+    }, { passive: false });
+
+    /* ═══════════════════════════════════════════════════════════════
+       DISABLE iOS RUBBER-BAND on app chrome (chat keeps natural scroll)
+       ═══════════════════════════════════════════════════════════════ */
+    document.addEventListener('touchmove', function(e){
+      const t = e.target;
+      if(t && t.closest && t.closest('.top-bar, #ctbHead, .env-strip, .mode-strip, .fab-cluster')){
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    /* ═══════════════════════════════════════════════════════════════
+       ORIENTATION CHANGE — recalc viewport
+       ═══════════════════════════════════════════════════════════════ */
+    function _onOrientationChange(){
+      /* Small delay for iOS to settle */
+      setTimeout(function(){
+        document.documentElement.style.setProperty('--vh', (window.innerHeight * 0.01) + 'px');
+      }, 200);
+    }
+    window.addEventListener('orientationchange', _onOrientationChange);
+    window.addEventListener('resize', _onOrientationChange);
+    _onOrientationChange();
+
+    /* ═══════════════════════════════════════════════════════════════
+       Stop iOS Safari from zooming on rapid double-tap
+       ═══════════════════════════════════════════════════════════════ */
+    document.addEventListener('gesturestart', function(e){
+      /* Only block on UI chrome, allow on chat content */
+      const t = e.target;
+      if(t && t.closest && t.closest('button, .btn, .fbtn, .top-bar, .env-strip, .mode-strip, .fab-cluster')){
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    /* ═══════════════════════════════════════════════════════════════
+       DEBUG API
+       ═══════════════════════════════════════════════════════════════ */
+    window._mf2 = {
+      viewport: function(){
+        return {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          dvh: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vh')) * 100,
+          kbOffset: getComputedStyle(document.documentElement).getPropertyValue('--kb-offset'),
+          isTouch: 'ontouchstart' in window,
+          orientation: window.screen.orientation ? window.screen.orientation.type : 'unknown'
+        };
+      },
+      refreshViewport: _fixViewport
+    };
+
+    console.log('Spurana ✦ Mobile Fitness 2 — 44px touch targets, 16px inputs, safe-area-insets, keyboard-aware composer, no rubber-band, reduced-motion respect. _mf2.viewport() to inspect.');
+  })();
+
+
+
+
+
 
 
 

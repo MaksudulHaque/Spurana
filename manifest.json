@@ -1,16 +1,27 @@
 {
-  "name": "Spurana",
+  "name": "Spurana ✦ Sacred Sanctuary",
   "short_name": "Spurana",
-  "description": "A Sacred Space to Talk With Your Soul",
+  "description": "A Bengali spiritual chat sanctuary for two souls.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#060409",
-  "theme_color": "#060409",
-  "categories": ["lifestyle", "social"],
+  "orientation": "portrait-primary",
+  "background_color": "#06040c",
+  "theme_color": "#E8009A",
+  "lang": "en",
+  "categories": ["lifestyle", "social", "music"],
   "icons": [
-    { "src": "/icons/192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><defs><radialGradient id='g' cx='50%' cy='40%' r='60%'><stop offset='0%' stop-color='%23FF6B9D'/><stop offset='60%' stop-color='%238B0052'/><stop offset='100%' stop-color='%23120410'/></radialGradient></defs><rect width='192' height='192' rx='32' fill='url(%23g)'/><text x='96' y='128' font-family='serif' font-size='110' fill='%23F2EBF8' text-anchor='middle'>✦</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><defs><radialGradient id='g' cx='50%' cy='40%' r='60%'><stop offset='0%' stop-color='%23FF6B9D'/><stop offset='60%' stop-color='%238B0052'/><stop offset='100%' stop-color='%23120410'/></radialGradient></defs><rect width='512' height='512' rx='96' fill='url(%23g)'/><text x='256' y='342' font-family='serif' font-size='290' fill='%23F2EBF8' text-anchor='middle'>✦</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
   ]
 }

@@ -40,7 +40,5 @@
         { "key": "Cache-Control", "value": "no-store" }
       ]
     }
-  ],
-  "redirects": [],
-  "rewrites": []
+  ]
 }

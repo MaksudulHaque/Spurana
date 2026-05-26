@@ -1,114 +1,132 @@
-# Spurana ✦ A Sacred Space to Talk With Your Soul
+# Spurana ✦ Beta Green L 1
 
-A Bengali spiritual chat sanctuary for two souls. Single-file Progressive Web App with 50 divines, 21 teachers, guided meditations, breathwork, relational healing rituals, and the Awakening — a 10-path cosmic field with binaural audio.
+A polished, Vercel-ready build of Spurana — Bengali spiritual chat sanctuary for two souls.
 
-All credits to Lord NWP · November Whisky Papa.
+All credits to **Lord NWP · November Whisky Papa**.
 
 ---
 
-## Quick start
+## What's in this build
 
-### Local development
+| File | Purpose |
+|---|---|
+| `index.html` | The entire app — single-file PWA (~28k lines, 1.6 MB) |
+| `service-worker.js` | PWA offline support + cache busting |
+| `manifest.json` | PWA install metadata (icons, theme, display mode) |
+| `vercel.json` | Vercel deployment config (security headers, caching) |
+| `api/ai.js` | Anthropic API proxy serverless function |
+| `firebase-rules.json` | Realtime Database security rules |
+| `firebase-storage-rules.txt` | Storage rules for avatars/voice/media |
+| `FIREBASE-SCHEMA.md` | Complete database schema documentation |
+| `.env.example` | Documents required env vars |
+| `.gitignore` | Excludes secrets, node_modules, OS junk |
+| `.gitattributes` | Forces LF line endings (Windows → Linux) |
+
+---
+
+## What's new in Beta Green L 1
+
+Everything in the previous v6.7 build, plus:
+- ✦ Listen Together LIVE — always-on Firebase listener, auto-open on partner activity
+- ✦ Audio Broadcast — WebRTC tab-audio streaming (share Spotify Premium to your free partner)
+- ✦ Auto Mode — silent audio priming + auto-accept broadcasts (no prompts)
+- ✦ YouTube Music URL normalization + 7-second watchdog with clean fallback
+- ✦ Modal Layer Hardening — all modals fully opaque, body scroll lock
+- ✦ Divine Voice Embodiment — Kali + Saraswati with breath, drone, signature sounds
+- ✦ Heart-Centred Rebuild — 15 relational healing rituals with phase engine
+- ✦ The Awakening — 10 cosmic paths with binaural beats per method
+- ✦ Complete Firebase schema with server-side validation
+
+---
+
+## Deploy in 3 minutes
+
+### 1 · Upload to GitHub
 
 ```bash
-cd spurana-final
-python3 -m http.server 8080
+cd "Beta Green L 1"
+git init
+git branch -M main
+git add .
+git commit -m "Spurana ✦ Beta Green L 1"
+
+# Either via gh CLI:
+gh repo create spurana --private --source=. --remote=origin --push
+
+# Or create the repo manually at github.com/new, then:
+git remote add origin git@github.com:YOUR-USERNAME/spurana.git
+git push -u origin main
 ```
 
-Open `http://localhost:8080`. The Anthropic AI proxy won't work locally (no serverless runtime) — the app falls back to local divine wisdom. Everything else works.
+### 2 · Connect to Vercel
 
-### Deploy to production
+1. Go to https://vercel.com/new
+2. Sign in with GitHub → Import the `spurana` repo
+3. Framework Preset: **Other** · Build Command + Output Directory: blank
+4. **Environment Variables** → add:
+   - Key: `ANTHROPIC_API_KEY`
+   - Value: your `sk-ant-...` key from console.anthropic.com
+   - Check all three environments (Production · Preview · Development)
+5. Click **Deploy**
 
-**→ See [`VERCEL-DEPLOY.md`](VERCEL-DEPLOY.md) for full deployment instructions (recommended)**
+Live at `https://your-project.vercel.app` in ~30 seconds.
 
-Two-platform support — the same zip works on either:
-- **Vercel** (recommended) — primary endpoint `/api/ai`
-- **Netlify** (legacy / fallback) — `/.netlify/functions/ai`
+### 3 · Configure Firebase
 
----
-
-## What's inside
-
-### Single-file PWA — `index.html`
-- ~24,800 lines · 1.5MB · zero build step
-- Works offline once cached
-- Installs as a standalone app on iOS / Android / desktop
-- Bilingual: English / বাংলা (toggle in Global Settings)
-
-### Sanctuary features
-- **50 divines + 21 teachers** — each with mantras, wisdom, native scripts
-- **The Awakening** — 10 cosmic paths (Atma Vichara · Vipassana · Shadow Work · IFS · Sufi Muraqaba · Sedona · Holotropic · Maranasati · Hesychasm · Zen Koan) with guided voice, binaural beats per method
-- **Heart-Centred** — 15 relational healing rituals with timed turns, response rules, emotional logging
-- **Meditation Library** — 36 methods across 6 traditions
-- **30 Sacred Postures** with SVG illustrations
-- **32 environments** with time-of-day awareness
-- **6 procedural chant styles** via Web Audio
-- **Divine Voice Embodiment** — Kali (73.4Hz · gong · sharp inhale) & Saraswati (261.6Hz · veena · soft flow)
-- **Living Connection Tree** — visual graph of soul connections
-- **WebRTC calls** — audio & video with TURN servers
-- **Voice messages** — iOS-compatible (webm + mp4 fallback)
-- **Scheduler** — send messages to the future (Firebase-synced)
-- **Memorable Days** — shared sacred dates calendar
-- **Multi-room foundation** — per-room AES encryption keys
-- **PWA install** — manifest + service worker
-
-### Infrastructure
-- **Firebase Realtime Database** — chat, presence, auth (config in `index.html` line 875)
-- **Firebase Storage** — voice messages
-- **Anthropic API** — divine responses (via serverless proxy)
-- **Google Cloud TTS** — optional, for studio-grade Wavenet voices
-- **OpenRelay TURN** — for WebRTC traversal on mobile networks
-
-### Aesthetic
-Classic Cinzel Decorative + Cormorant Garamond + Orbitron typography. Dark cosmic backdrops, pink-glow orbs, drifting star fields. Designed to feel sacred, not modern-app.
-
----
-
-## File layout
-
-```
-spurana-final/
-├── index.html              ← entire app
-├── manifest.json           ← PWA manifest
-├── service-worker.js       ← PWA service worker
-├── firebase-rules.json     ← Firebase Realtime DB rules
-├── vercel.json             ← Vercel deployment config
-├── netlify.toml            ← Netlify deployment config
-├── api/
-│   └── ai.js               ← Vercel AI proxy (primary)
-├── netlify/functions/
-│   └── ai.js               ← Netlify AI proxy (fallback)
-├── README.md               ← this file
-└── VERCEL-DEPLOY.md        ← step-by-step Vercel deployment
-```
+1. **https://console.firebase.google.com** → select `spurana-abe15`
+2. **Authentication → Settings → Authorized domains** → Add your Vercel URL
+3. **Realtime Database → Rules** → paste `firebase-rules.json` → Publish
+4. **Storage → Rules** → paste `firebase-storage-rules.txt` → Publish
 
 ---
 
 ## Environment variables
 
-Set in your hosting provider's dashboard:
-
 | Name | Required | Where to get it |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | optional | https://console.anthropic.com |
+| `ANTHROPIC_API_KEY` | optional* | https://console.anthropic.com/settings/keys |
 
-If not set, users can paste their own key into **Sanctuary → Settings → Global Settings → 🔑 Anthropic API Key**. Their key is stored locally only (never sent to your server).
-
----
-
-## Firebase setup
-
-1. Go to https://console.firebase.google.com
-2. Use the existing `spurana-abe15` project, or create your own
-3. If creating new: enable **Realtime Database** (region: asia-southeast1) + **Authentication (Email/Password)** + **Storage**
-4. Copy your config → paste into `index.html` line ~875 (`firebaseConfig` object)
-5. **Realtime Database → Rules** → paste contents of `firebase-rules.json` → Publish
-6. **Authentication → Settings → Authorized domains** → add your deployed URL
+*Optional because users can paste their own key in **Sanctuary → Settings → Global Settings → 🔑 Anthropic API Key** (stored only on their device, never sent to your server).
 
 ---
 
-## License
+## Test the deployment
 
-Sacred work. Free for personal use. All credits to **NWP · November Whisky Papa**.
+After deploy, open your Vercel URL → DevTools → Console:
+
+```js
+// Test AI proxy
+fetch('/api/ai', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({ systemPrompt: 'Reply briefly', userText: 'Hi', maxTokens: 30 })
+}).then(r => r.json()).then(console.log)
+// Expected: { text: "Hello..." }
+
+// Test Listen Together state
+_listenTogether.state()
+
+// Test Audio Broadcast role
+_audioBroadcast.role()
+
+// Test YT Music URL normalizer
+_ytFix.normalize('https://music.youtube.com/watch?v=Mqc37ItMefM&si=xyz')
+```
+
+---
+
+## Updates
+
+```bash
+git add .
+git commit -m "fix: whatever"
+git push
+```
+
+Vercel auto-deploys in ~30s. Hard-refresh once to pick up the new service worker.
+
+---
 
 — ✦ —
+
+**NWP · Keeper of this Realm**

@@ -1,18 +1,13 @@
 // Spurana ✦ Anthropic API proxy — Vercel serverless function
 //
-// Accepts either:
-//   · a server-side ANTHROPIC_API_KEY env var (set in Vercel dashboard), OR
-//   · a clientKey in the request body (so a user can pay for their own usage)
+// Exposed at: https://<your-app>.vercel.app/api/ai
 //
-// Client-supplied keys always win when present.
+// Set ANTHROPIC_API_KEY in Vercel dashboard → Settings → Environment Variables
+// (Production / Preview / Development — check all three)
 //
-// Deploy: this file lives at /api/ai.js so it's automatically exposed
-// at https://<your-app>.vercel.app/api/ai
-//
-// Uses Node.js 18+ runtime (default on Vercel) — has fetch built-in.
+// Uses Node 18+ runtime (default on Vercel) — fetch is built-in.
 
 export default async function handler(req, res) {
-  // CORS preflight (in case the app is embedded somewhere)
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -26,10 +21,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Vercel parses JSON automatically when Content-Type is application/json
     const body = req.body || {};
     const { systemPrompt, userText, maxTokens, clientKey } = body;
-
     const apiKey = (clientKey && clientKey.trim()) || process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey) {
@@ -68,13 +61,11 @@ export default async function handler(req, res) {
     return res.status(200).json({ text });
   } catch (e) {
     return res.status(500).json({
-      error: e.message || 'Unknown error',
-      stack: process.env.NODE_ENV === 'development' ? (e.stack || '') : undefined
+      error: e.message || 'Unknown error'
     });
   }
 }
 
-// Vercel function config — runs in Node.js runtime
 export const config = {
-  maxDuration: 30 // seconds — Anthropic responses can take up to ~25s
+  maxDuration: 30
 };

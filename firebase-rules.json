@@ -1,42 +1,170 @@
 {
   "rules": {
+    ".read": false,
+    ".write": false,
+
     "users": {
+      ".read": "auth != null",
+      ".indexOn": ["online", "lastSeen"],
       "$uid": {
-        ".read":  "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid",
-        "profile": {
-          ".read": "auth != null"
-        },
-        "presence": {
-          ".read": "auth != null",
-          ".write": "auth != null && auth.uid === $uid"
+        ".validate": "newData.hasChildren(['name'])",
+        "name":      { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "email":     { ".validate": "newData.isString() && newData.val().length <= 200" },
+        "avatar":    { ".validate": "newData.isString() && newData.val().length <= 2000" },
+        "online":    { ".validate": "newData.isBoolean()" },
+        "lastSeen":  { ".validate": "newData.isNumber()" },
+        "deity":     { ".validate": "newData.isString() && newData.val().length <= 40" },
+        "memories":  { ".validate": "newData.hasChildren() || newData.val() == null" },
+
+        "hc_logs": {
+          ".read":  "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid",
+          ".indexOn": ["ts"],
+          "$logKey": {
+            "practice":     { ".validate": "newData.isString() && newData.val().length <= 50" },
+            "practiceName": { ".validate": "newData.isString() && newData.val().length <= 100" },
+            "mode":         { ".validate": "newData.isString() && (newData.val() == 'solo' || newData.val() == 'couple')" },
+            "ts":           { ".validate": "newData.isNumber()" },
+            "durationMs":   { ".validate": "newData.isNumber()" },
+            "rating":       { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5" },
+            "note":         { ".validate": "newData.isString() && newData.val().length <= 500" }
+          }
         }
       }
     },
 
     "messages": {
-      ".read": "auth != null",
-      ".indexOn": ["ts"],
-      "$msgId": {
-        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid || newData.child('seen').isBoolean() || newData.child('reactions').exists())",
-        ".validate": "newData.hasChildren(['uid','ts']) && newData.child('text').val().length <= 4000"
+      ".read":  "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["ts", "room"],
+      "$msgKey": {
+        ".validate": "newData.hasChildren(['uid', 'ts'])",
+        "uid":       { ".validate": "newData.isString() && (!data.exists() || data.child('uid').val() === auth.uid || newData.val() === auth.uid)" },
+        "name":      { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "text":      { ".validate": "newData.isString() && newData.val().length <= 4000" },
+        "type":      { ".validate": "newData.isString() && (newData.val() == 'text' || newData.val() == 'image' || newData.val() == 'video' || newData.val() == 'voice' || newData.val() == 'file')" },
+        "url":       { ".validate": "newData.isString() && newData.val().length <= 2000" },
+        "ts":        { ".validate": "newData.isNumber()" },
+        "deleted":   { ".validate": "newData.isBoolean()" },
+        "editedAt":  { ".validate": "newData.isNumber()" },
+        "room":      { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "reactions": {
+          "$reactorUID": {
+            ".write": "auth != null && auth.uid === $reactorUID",
+            ".validate": "newData.isString() && newData.val().length <= 8"
+          }
+        }
+      }
+    },
+
+    "presence": {
+      ".read":  "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        "online":   { ".validate": "newData.isBoolean()" },
+        "lastSeen": { ".validate": "newData.isNumber()" }
       }
     },
 
     "typing": {
       ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null && auth.uid === $uid"
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.isBoolean() || newData.val() == null"
       }
     },
 
-    "invites": {
-      "SPURANA-2024": {
-        ".read": "auth != null"
+    "soulCard": {
+      ".read":  "auth != null",
+      ".write": "auth != null",
+      "ts":       { ".validate": "newData.isNumber()" },
+      "deity":    { ".validate": "newData.isString() && newData.val().length <= 40" },
+      "meaning":  { ".validate": "newData.isString() && newData.val().length <= 2000" },
+      "drawnBy":  { ".validate": "newData.isString()" }
+    },
+
+    "whispers": {
+      ".read":  "auth != null",
+      ".write": "auth != null",
+      ".indexOn": ["expiresAt"],
+      "$key": {
+        "uid":       { ".validate": "newData.isString() && newData.val() === auth.uid" },
+        "text":      { ".validate": "newData.isString() && newData.val().length <= 4000" },
+        "expiresAt": { ".validate": "newData.isNumber()" }
       }
     },
 
-    ".read":  false,
-    ".write": false
+    "shared": {
+      ".read":  "auth != null",
+      ".write": "auth != null",
+
+      "memorableDays": {
+        ".indexOn": ["date"],
+        "$key": {
+          "title":     { ".validate": "newData.isString() && newData.val().length <= 200" },
+          "date":      { ".validate": "newData.isString() && newData.val().length == 10" },
+          "note":      { ".validate": "newData.isString() && newData.val().length <= 2000" },
+          "createdBy": { ".validate": "newData.isString()" }
+        }
+      },
+
+      "schedule": {
+        ".indexOn": ["ts"],
+        "$key": {
+          "ts":        { ".validate": "newData.isNumber()" },
+          "text":      { ".validate": "newData.isString() && newData.val().length <= 4000" },
+          "createdBy": { ".validate": "newData.isString()" },
+          "delivered": { ".validate": "newData.isBoolean()" }
+        }
+      },
+
+      "watch_session": {
+        "videoUrl":    { ".validate": "newData.isString() && newData.val().length <= 2000" },
+        "videoId":     { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "type":        { ".validate": "newData.isString()" },
+        "isPlaying":   { ".validate": "newData.isBoolean()" },
+        "currentTime": { ".validate": "newData.isNumber()" },
+        "lastUpdated": { ".validate": "newData.isNumber()" },
+        "lastBy":      { ".validate": "newData.isString()" },
+        "lastByName":  { ".validate": "newData.isString() && newData.val().length <= 80" }
+      },
+
+      "listen_session": {
+        "url":         { ".validate": "newData.isString() && newData.val().length <= 2000" },
+        "type":        { ".validate": "newData.isString()" },
+        "isPlaying":   { ".validate": "newData.isBoolean()" },
+        "currentTime": { ".validate": "newData.isNumber()" },
+        "lastUpdated": { ".validate": "newData.isNumber()" },
+        "lastBy":      { ".validate": "newData.isString()" },
+        "lastByName":  { ".validate": "newData.isString() && newData.val().length <= 80" }
+      }
+    },
+
+    "rtc": {
+      ".read":  "auth != null",
+      ".write": "auth != null",
+
+      "activeCall": {
+        "type":         { ".validate": "newData.isString() && (newData.val() == 'audio' || newData.val() == 'video')" },
+        "callerUID":    { ".validate": "newData.isString()" },
+        "callerName":   { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "startedAt":    { ".validate": "newData.isNumber()" },
+        "offer":  { "type": {}, "sdp": { ".validate": "newData.isString()" } },
+        "answer": { "type": {}, "sdp": { ".validate": "newData.isString()" } },
+        "iceFromCaller": { "$key": {} },
+        "iceFromCallee": { "$key": {} }
+      },
+
+      "audioBroadcast": {
+        "senderUID":    { ".validate": "newData.isString()" },
+        "senderName":   { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "startedAt":    { ".validate": "newData.isNumber()" },
+        "offer":  { "type": {}, "sdp": { ".validate": "newData.isString()" } },
+        "answer": { "type": {}, "sdp": { ".validate": "newData.isString()" } },
+        "iceFromSender":   { "$key": {} },
+        "iceFromReceiver": { "$key": {} }
+      }
+    }
   }
 }

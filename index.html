@@ -32705,6 +32705,1797 @@ html.low-battery::before {
     console.log('  Try: _battery.hidden(), _notif.request(), _notif.show("Hi", {body:"Test"})');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  MULTI-SOUL CHAT — invite friends, multiple encrypted threads  ║
+     ║                                                                ║
+     ║  Architecture:                                                 ║
+     ║   · Each pair of souls = one conversation                      ║
+     ║   · convId = [uidA, uidB].sort().join('--') (deterministic)    ║
+     ║   · Messages get a convId field                                ║
+     ║   · Old messages without convId = legacy (shown in conv #1)    ║
+     ║   · E2E: each contact has their own pub key cached             ║
+     ║   · Send: encrypt to active partner's key only                 ║
+     ║   · Receive: decrypt with my own private key (works any sender)║
+     ║                                                                ║
+     ║  Invites:                                                      ║
+     ║   · "Invite a Soul" generates 6-char code at invites/{code}    ║
+     ║   · Share code via WhatsApp/text/voice/whatever                ║
+     ║   · New soul: open app → "Accept Invite" → enter code          ║
+     ║   · App adds both contacts to each other's lists               ║
+     ║   · Invite expires in 7 days                                   ║
+     ║                                                                ║
+     ║  Firebase paths added:                                         ║
+     ║   · users/{uid}/contacts/{partnerUid} → {name, addedAt}        ║
+     ║   · users/{uid}/unread/{convId} → count                        ║
+     ║   · users/{uid}/activeConv → partnerUid (last-selected)        ║
+     ║   · invites/{code} → {from, fromName, createdAt, expiresAt}    ║
+     ║   · conversations/{convId}/lastMsg → {ts, preview, by}         ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function MultiSoulChat(){
+    'use strict';
+
+    /* ═══════════════════════════════════════════════════════════════
+       STATE
+       ═══════════════════════════════════════════════════════════════ */
+    const STATE = {
+      activePartnerUid: null,
+      activeConvId: null,
+      activePartnerName: null,
+      contacts: {},        /* uid → {name, addedAt, lastMsgPreview, lastMsgTs, unread} */
+      isLegacyConv: false, /* true when active is the first/default conv */
+      legacyPartnerUid: null,  /* the original partner (auto-imported) */
+      ready: false
+    };
+
+    /* ═══════════════════════════════════════════════════════════════
+       HELPERS
+       ═══════════════════════════════════════════════════════════════ */
+    function _convId(a, b){
+      return [a, b].sort().join('--');
+    }
+
+    function _shortCode(){
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for(let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+      return code;
+    }
+
+    function _escapeHtml(s){
+      if(typeof s !== 'string') return '';
+      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+    }
+
+    function _initial(name){
+      return (name || '?').trim().charAt(0).toUpperCase();
+    }
+
+    function _formatTime(ts){
+      if(!ts) return '';
+      const d = new Date(ts);
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      if(sameDay){
+        return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      }
+      const diff = now - d;
+      if(diff < 7 * 24 * 60 * 60 * 1000){
+        return d.toLocaleDateString([], { weekday: 'short' });
+      }
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       STYLES
+       ═══════════════════════════════════════════════════════════════ */
+    if(!document.getElementById('mscStyles')){
+      const s = document.createElement('style');
+      s.id = 'mscStyles';
+      s.textContent = `
+/* ── Hamburger button at top-left of chat ── */
+#mscMenuBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px; height: 40px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(232,0,154,.25);
+  border-radius: 12px;
+  color: #FFB8D0;
+  font-size: 18px;
+  cursor: pointer;
+  margin-right: 8px;
+  position: relative;
+  transition: all .2s;
+  touch-action: manipulation;
+}
+#mscMenuBtn:hover { background: rgba(232,0,154,.15); transform: scale(1.05); }
+#mscMenuBtn:active { transform: scale(0.95); }
+#mscMenuBtn.has-unread::after {
+  content: ''; position: absolute; top: 4px; right: 4px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #FF6B9D;
+  box-shadow: 0 0 8px #FF6B9D;
+  animation: mscPulse 1.5s ease-in-out infinite;
+}
+@keyframes mscPulse { 0%,100%{opacity:.7} 50%{opacity:1} }
+
+/* ── Contact list overlay (slides in from left) ── */
+#mscOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8,4,14,.6);
+  backdrop-filter: blur(8px);
+  z-index: 99980;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s;
+}
+#mscOverlay.on { opacity: 1; pointer-events: auto; }
+
+#mscPanel {
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  width: 340px;
+  max-width: 88vw;
+  background: linear-gradient(180deg, rgba(20,8,28,.96), rgba(10,4,18,.97));
+  backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(232,0,154,.25);
+  z-index: 99981;
+  transform: translateX(-100%);
+  transition: transform .35s cubic-bezier(.2,.9,.3,1);
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+#mscPanel.on { transform: translateX(0); }
+
+.msc-panel-head {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid rgba(232,0,154,.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.msc-panel-title {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 16px;
+  letter-spacing: .08em;
+  background: linear-gradient(135deg, #FF6B9D, #E2C28A);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.msc-panel-sub {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 11px;
+  color: rgba(242,235,248,.5);
+  margin-top: 2px;
+}
+.msc-panel-close {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.15);
+  color: #F2EBF8;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* ── Invite buttons block ── */
+.msc-actions {
+  padding: 12px 18px;
+  display: flex; gap: 8px;
+  border-bottom: 1px solid rgba(232,0,154,.1);
+  flex-shrink: 0;
+}
+.msc-action {
+  flex: 1;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(232,0,154,.18), rgba(232,0,154,.08));
+  border: 1px solid rgba(232,0,154,.3);
+  color: #FFB8D0;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 12px;
+  letter-spacing: .08em;
+  transition: all .2s;
+  touch-action: manipulation;
+}
+.msc-action:hover { background: linear-gradient(135deg, rgba(232,0,154,.3), rgba(232,0,154,.15)); }
+.msc-action:active { transform: scale(0.97); }
+
+/* ── Contact list ── */
+#mscContacts {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 0;
+}
+.msc-contact {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all .2s;
+  touch-action: manipulation;
+  position: relative;
+}
+.msc-contact:hover { background: rgba(232,0,154,.06); }
+.msc-contact.active {
+  background: linear-gradient(90deg, rgba(232,0,154,.18), rgba(232,0,154,.02));
+  border-left-color: #E8009A;
+}
+.msc-contact-avatar {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #E8009A, #FF6B9D);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 20px;
+  color: #fff;
+  flex-shrink: 0;
+  text-shadow: 0 1px 4px rgba(0,0,0,.4);
+  border: 1px solid rgba(255,255,255,.15);
+}
+.msc-contact.active .msc-contact-avatar {
+  box-shadow: 0 0 14px rgba(232,0,154,.5);
+}
+.msc-contact-body {
+  flex: 1;
+  min-width: 0;
+}
+.msc-contact-row1 {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 2px;
+}
+.msc-contact-name {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 14px;
+  color: #F2EBF8;
+  letter-spacing: .03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.msc-contact-time {
+  font-family: 'Orbitron', monospace;
+  font-size: 9px;
+  letter-spacing: .1em;
+  color: rgba(255,184,208,.5);
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.msc-contact-row2 {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.msc-contact-preview {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 12px;
+  color: rgba(242,235,248,.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.msc-contact-unread {
+  background: linear-gradient(135deg, #E8009A, #FF6B9D);
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-left: 6px;
+  min-width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(232,0,154,.5);
+}
+.msc-contact-empty {
+  padding: 30px 20px;
+  text-align: center;
+  color: rgba(242,235,248,.4);
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ── Invite modal ── */
+#mscInviteModal, #mscAcceptModal {
+  position: fixed;
+  inset: 0;
+  background: rgba(8,4,14,.92);
+  backdrop-filter: blur(12px);
+  z-index: 99990;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+#mscInviteModal.on, #mscAcceptModal.on { display: flex; }
+.msc-modal-card {
+  max-width: 420px;
+  width: 100%;
+  background: linear-gradient(145deg, rgba(40,12,28,.96), rgba(15,8,22,.96));
+  border: 1px solid rgba(232,0,154,.3);
+  border-radius: 20px;
+  padding: 26px;
+  text-align: center;
+  position: relative;
+}
+.msc-modal-close {
+  position: absolute; top: 12px; right: 12px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.15);
+  color: #F2EBF8;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.msc-modal-icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+  filter: drop-shadow(0 0 18px rgba(232,0,154,.5));
+}
+.msc-modal-title {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 20px;
+  letter-spacing: .06em;
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, #FF6B9D, #E2C28A);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.msc-modal-desc {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: rgba(242,235,248,.7);
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+.msc-code-display {
+  font-family: 'Courier New', monospace;
+  font-size: 32px;
+  letter-spacing: .3em;
+  color: #E2C28A;
+  background: rgba(15,8,22,.7);
+  border: 1px solid rgba(226,194,138,.3);
+  border-radius: 14px;
+  padding: 18px;
+  margin: 12px 0 14px;
+  user-select: all;
+  cursor: pointer;
+}
+.msc-code-display:hover { background: rgba(226,194,138,.08); }
+.msc-code-meta {
+  font-family: 'Orbitron', monospace;
+  font-size: 9px;
+  letter-spacing: .2em;
+  color: rgba(226,194,138,.55);
+  margin-bottom: 14px;
+  text-transform: uppercase;
+}
+.msc-code-input {
+  font-family: 'Courier New', monospace;
+  font-size: 28px;
+  letter-spacing: .3em;
+  text-align: center;
+  width: 100%;
+  background: rgba(15,8,22,.7);
+  border: 1px solid rgba(226,194,138,.3);
+  border-radius: 14px;
+  padding: 16px;
+  color: #E2C28A;
+  text-transform: uppercase;
+  outline: none;
+  margin-bottom: 14px;
+}
+.msc-code-input:focus { border-color: #E8009A; }
+.msc-modal-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* ── Chat header gets a contact name + tap to switch ── */
+.msc-chat-partner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 12px;
+  transition: background .2s;
+}
+.msc-chat-partner:hover { background: rgba(232,0,154,.1); }
+.msc-chat-partner-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #E8009A, #FF6B9D);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 13px;
+  color: #fff;
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       UI INJECTION — overlay + panel + modals
+       ═══════════════════════════════════════════════════════════════ */
+    function _injectUI(){
+      if(document.getElementById('mscPanel')) return;
+      const overlay = document.createElement('div');
+      overlay.id = 'mscOverlay';
+      overlay.addEventListener('click', _closePanel);
+      document.body.appendChild(overlay);
+
+      const panel = document.createElement('div');
+      panel.id = 'mscPanel';
+      panel.innerHTML = `
+        <div class="msc-panel-head">
+          <div>
+            <div class="msc-panel-title">✦ Souls</div>
+            <div class="msc-panel-sub">Your sacred connections</div>
+          </div>
+          <button class="msc-panel-close" id="mscPanelClose" aria-label="Close">✕</button>
+        </div>
+        <div class="msc-actions">
+          <button class="msc-action" id="mscInviteBtn">＋ Invite Soul</button>
+          <button class="msc-action" id="mscAcceptBtn">↩ Accept Invite</button>
+        </div>
+        <div id="mscContacts">
+          <div class="msc-contact-empty">No souls yet. Invite one to begin.</div>
+        </div>
+      `;
+      document.body.appendChild(panel);
+
+      document.getElementById('mscPanelClose').addEventListener('click', _closePanel);
+      document.getElementById('mscInviteBtn').addEventListener('click', _openInviteModal);
+      document.getElementById('mscAcceptBtn').addEventListener('click', _openAcceptModal);
+
+      /* Invite modal */
+      const inv = document.createElement('div');
+      inv.id = 'mscInviteModal';
+      inv.innerHTML = `
+        <div class="msc-modal-card">
+          <button class="msc-modal-close" id="mscInviteClose" aria-label="Close">✕</button>
+          <div class="msc-modal-icon">✦</div>
+          <div class="msc-modal-title">Invite a Soul</div>
+          <div class="msc-modal-desc">Share this code with someone you trust. Speak it on a call, send by text. They paste it in their Spurana to join your circle.</div>
+          <div class="msc-code-display" id="mscInviteCode" title="Tap to copy">——————</div>
+          <div class="msc-code-meta" id="mscInviteExpiry">Code expires in 7 days</div>
+          <div class="msc-modal-btns">
+            <button class="fbtn" id="mscInviteCopy">Copy Code</button>
+            <button class="fbtn alt" id="mscInviteShare">Share</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(inv);
+      document.getElementById('mscInviteClose').addEventListener('click', () => inv.classList.remove('on'));
+      document.getElementById('mscInviteCopy').addEventListener('click', _copyInviteCode);
+      document.getElementById('mscInviteShare').addEventListener('click', _shareInviteCode);
+      document.getElementById('mscInviteCode').addEventListener('click', _copyInviteCode);
+
+      /* Accept modal */
+      const acc = document.createElement('div');
+      acc.id = 'mscAcceptModal';
+      acc.innerHTML = `
+        <div class="msc-modal-card">
+          <button class="msc-modal-close" id="mscAcceptClose" aria-label="Close">✕</button>
+          <div class="msc-modal-icon">↩</div>
+          <div class="msc-modal-title">Accept Invite</div>
+          <div class="msc-modal-desc">Enter the 6-letter code your beloved shared with you.</div>
+          <input type="text" class="msc-code-input" id="mscAcceptInput" maxlength="6" placeholder="ABC123" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+          <div class="msc-modal-btns">
+            <button class="fbtn" id="mscAcceptSubmit">Accept ✦</button>
+            <button class="fbtn alt" id="mscAcceptCancel">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(acc);
+      document.getElementById('mscAcceptClose').addEventListener('click', () => acc.classList.remove('on'));
+      document.getElementById('mscAcceptCancel').addEventListener('click', () => acc.classList.remove('on'));
+      document.getElementById('mscAcceptSubmit').addEventListener('click', _submitAccept);
+      document.getElementById('mscAcceptInput').addEventListener('keydown', e => {
+        if(e.key === 'Enter') _submitAccept();
+      });
+      document.getElementById('mscAcceptInput').addEventListener('input', function(){
+        this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+      });
+    }
+
+    /* Inject hamburger button into chat topbar */
+    function _injectMenuButton(){
+      if(document.getElementById('mscMenuBtn')) return;
+      /* Find the topbar — try common selectors */
+      const topbar = document.querySelector('.top-bar, #ctbHead, .top-left, header, [class*="top-bar"]');
+      if(!topbar) return;
+      const btn = document.createElement('button');
+      btn.id = 'mscMenuBtn';
+      btn.innerHTML = '☰';
+      btn.setAttribute('aria-label', 'Open contacts');
+      btn.title = 'Souls';
+      btn.addEventListener('click', _openPanel);
+      /* Try to insert at the very start of the topbar */
+      if(topbar.firstChild){
+        topbar.insertBefore(btn, topbar.firstChild);
+      } else {
+        topbar.appendChild(btn);
+      }
+    }
+
+    function _openPanel(){
+      document.getElementById('mscPanel').classList.add('on');
+      document.getElementById('mscOverlay').classList.add('on');
+      _renderContacts();
+    }
+    function _closePanel(){
+      document.getElementById('mscPanel').classList.remove('on');
+      document.getElementById('mscOverlay').classList.remove('on');
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CONTACT LIST RENDERING
+       ═══════════════════════════════════════════════════════════════ */
+    function _renderContacts(){
+      const c = document.getElementById('mscContacts');
+      if(!c) return;
+      const uids = Object.keys(STATE.contacts);
+      if(uids.length === 0){
+        c.innerHTML = '<div class="msc-contact-empty">No souls yet.<br>Invite one to begin.</div>';
+        return;
+      }
+      /* Sort: most recent message first */
+      uids.sort((a, b) => (STATE.contacts[b].lastMsgTs || 0) - (STATE.contacts[a].lastMsgTs || 0));
+      let html = '';
+      uids.forEach(uid => {
+        const ct = STATE.contacts[uid];
+        const isActive = uid === STATE.activePartnerUid;
+        const unread = ct.unread || 0;
+        html += `
+          <div class="msc-contact ${isActive ? 'active' : ''}" data-uid="${uid}" tabindex="0" role="button">
+            <div class="msc-contact-avatar">${_escapeHtml(_initial(ct.name))}</div>
+            <div class="msc-contact-body">
+              <div class="msc-contact-row1">
+                <div class="msc-contact-name">${_escapeHtml(ct.name || 'Beloved')}</div>
+                <div class="msc-contact-time">${_formatTime(ct.lastMsgTs)}</div>
+              </div>
+              <div class="msc-contact-row2">
+                <div class="msc-contact-preview">${_escapeHtml(ct.lastMsgPreview || 'No messages yet')}</div>
+                ${unread > 0 ? `<div class="msc-contact-unread">${unread}</div>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      c.innerHTML = html;
+      c.querySelectorAll('.msc-contact').forEach(el => {
+        el.addEventListener('click', () => {
+          const uid = el.dataset.uid;
+          _switchConv(uid);
+          _closePanel();
+        });
+      });
+      /* Update hamburger unread badge */
+      const anyUnread = uids.some(u => STATE.contacts[u].unread > 0);
+      const btn = document.getElementById('mscMenuBtn');
+      if(btn) btn.classList.toggle('has-unread', anyUnread);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CONVERSATION SWITCHING
+       ═══════════════════════════════════════════════════════════════ */
+    function _switchConv(partnerUid, partnerName){
+      if(typeof me === 'undefined' || !me || !me.uid) return;
+      if(!partnerUid) return;
+
+      STATE.activePartnerUid = partnerUid;
+      STATE.activeConvId = _convId(me.uid, partnerUid);
+      STATE.activePartnerName = partnerName ||
+        (STATE.contacts[partnerUid] && STATE.contacts[partnerUid].name) ||
+        'Beloved';
+      STATE.isLegacyConv = (partnerUid === STATE.legacyPartnerUid);
+
+      /* Clear unread for this conv */
+      if(STATE.contacts[partnerUid]){
+        STATE.contacts[partnerUid].unread = 0;
+      }
+      try{ localStorage.setItem('spurana_active_partner', partnerUid); }catch(_){}
+      if(typeof db !== 'undefined' && db && me.uid){
+        db.ref('users/' + me.uid + '/activeConv').set(partnerUid).catch(()=>{});
+        db.ref('users/' + me.uid + '/unread/' + STATE.activeConvId).set(0).catch(()=>{});
+      }
+
+      /* Re-target E2E to this partner */
+      if(window.spuranaCrypto && typeof window.spuranaCrypto._fetchPartnerKey === 'function'){
+        window.spuranaCrypto.partnerUid = partnerUid;
+        window.spuranaCrypto.partnerPubKey = null;
+        window.spuranaCrypto._fetchPartnerKey().catch(()=>{});
+      }
+
+      /* Update chat header */
+      _updateChatHeader();
+      /* Filter visible messages */
+      _refreshMessageVisibility();
+      /* Announce */
+      if(typeof toast === 'function') toast('✦ ' + STATE.activePartnerName);
+
+      _renderContacts();
+    }
+
+    function _updateChatHeader(){
+      /* Find common partner-name element + update */
+      const candidates = [
+        'partnerName', 'chatPartnerName', 'currentPartner',
+        'topPartner', 'partnerLabel'
+      ];
+      candidates.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.textContent = STATE.activePartnerName;
+      });
+      /* Also look for text containing common partner placeholders */
+      document.querySelectorAll('.partner-name, .chat-partner-name, [data-partner-name]').forEach(el => {
+        el.textContent = STATE.activePartnerName;
+      });
+    }
+
+    function _refreshMessageVisibility(){
+      /* For each rendered message in the chat, show if matches active conv */
+      const rows = document.querySelectorAll('[data-msg-key], [data-key], .msg-row');
+      rows.forEach(row => {
+        const key = row.dataset.msgKey || row.dataset.key;
+        let convId = row.dataset.convId;
+        if(!convId && key && window.allMsgs && window.allMsgs[key]){
+          convId = window.allMsgs[key].convId;
+        }
+        const showAsLegacy = !convId && STATE.isLegacyConv;
+        const matches = convId === STATE.activeConvId || showAsLegacy;
+        row.style.display = matches ? '' : 'none';
+      });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MESSAGE HOOKS — inject convId into outgoing, filter incoming
+       ═══════════════════════════════════════════════════════════════ */
+    function _hookMessageSend(){
+      if(typeof window.db === 'undefined' || !window.db) return false;
+      if(window.db.__mscWrapped) return true;
+      const origRef = window.db.ref.bind(window.db);
+      window.db.ref = function(path){
+        const refObj = origRef(path);
+        if(path !== 'messages' || !refObj.push || refObj.__mscPushWrapped) return refObj;
+        const origPush = refObj.push.bind(refObj);
+        refObj.push = function(value){
+          if(value && typeof value === 'object' && !value.convId && STATE.activeConvId){
+            /* Stamp the active conversation onto outgoing messages */
+            value = Object.assign({}, value, { convId: STATE.activeConvId });
+          }
+          /* Update conversation's last message preview */
+          if(value && value.uid === me.uid && STATE.activeConvId){
+            const preview = value.text === '🔒' ? '🔒 Encrypted' :
+                          value.type === 'image' ? '🖼️ Image' :
+                          value.type === 'voice' ? '🎙️ Voice' :
+                          value.type === 'video' ? '🎬 Video' :
+                          (value.text || '').slice(0, 50);
+            try{
+              window.db.ref('conversations/' + STATE.activeConvId + '/lastMsg').set({
+                ts: value.ts || Date.now(),
+                preview: preview,
+                uid: value.uid,
+                name: value.name
+              }).catch(()=>{});
+              if(STATE.contacts[STATE.activePartnerUid]){
+                STATE.contacts[STATE.activePartnerUid].lastMsgPreview = preview;
+                STATE.contacts[STATE.activePartnerUid].lastMsgTs = value.ts || Date.now();
+              }
+            }catch(_){}
+          }
+          return origPush(value);
+        };
+        refObj.__mscPushWrapped = true;
+        return refObj;
+      };
+      window.db.__mscWrapped = true;
+      return true;
+    }
+
+    function _hookAppendMsg(){
+      if(typeof window.appendMsg !== 'function') return false;
+      if(window.appendMsg.__mscWrapped) return true;
+      const orig = window.appendMsg;
+      window.appendMsg = function(key, m, animated){
+        const result = orig.call(this, key, m, animated);
+        try{
+          /* Tag the rendered DOM row with convId so we can filter */
+          const convId = (m && m.convId) || (STATE.isLegacyConv ? STATE.activeConvId : null);
+          const candidates = document.querySelectorAll(
+            '[data-msg-key="' + key + '"], [data-key="' + key + '"], #msg-' + key
+          );
+          candidates.forEach(el => {
+            if(convId) el.dataset.convId = convId;
+          });
+          /* Hide if not in active conv (and not legacy default) */
+          const showAsLegacy = !m.convId && STATE.isLegacyConv;
+          const matches = (m.convId && m.convId === STATE.activeConvId) || showAsLegacy;
+          if(!matches){
+            candidates.forEach(el => el.style.display = 'none');
+          }
+          /* Update last message preview for that conversation + unread count */
+          if(m && m.uid !== me.uid && m.ts){
+            const partnerUid = m.uid;
+            const msgConvId = m.convId || (STATE.legacyPartnerUid && _convId(me.uid, STATE.legacyPartnerUid));
+            const contactKey = msgConvId && msgConvId.split('--').find(u => u !== me.uid);
+            if(contactKey && STATE.contacts[contactKey]){
+              const preview = m.text === '🔒' ? '🔒 Encrypted' :
+                            m.type === 'image' ? '🖼️ Image' :
+                            m.type === 'voice' ? '🎙️ Voice' :
+                            (m.text || '').slice(0, 50);
+              STATE.contacts[contactKey].lastMsgPreview = preview;
+              STATE.contacts[contactKey].lastMsgTs = m.ts;
+              if(contactKey !== STATE.activePartnerUid){
+                STATE.contacts[contactKey].unread = (STATE.contacts[contactKey].unread || 0) + 1;
+                /* Reflect on hamburger badge */
+                const btn = document.getElementById('mscMenuBtn');
+                if(btn) btn.classList.add('has-unread');
+              }
+              if(document.getElementById('mscPanel') && document.getElementById('mscPanel').classList.contains('on')){
+                _renderContacts();
+              }
+            }
+          }
+        }catch(_){}
+        return result;
+      };
+      window.appendMsg.__mscWrapped = true;
+      return true;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       INVITE FLOW
+       ═══════════════════════════════════════════════════════════════ */
+    let _currentInviteCode = null;
+
+    async function _openInviteModal(){
+      if(typeof db === 'undefined' || !db || !me || !me.uid){
+        if(typeof toast === 'function') toast('Connection unavailable');
+        return;
+      }
+      const code = _shortCode();
+      _currentInviteCode = code;
+      const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      try{
+        await db.ref('invites/' + code).set({
+          from: me.uid,
+          fromName: typeof myName !== 'undefined' ? myName : 'Soul',
+          createdAt: Date.now(),
+          expiresAt: expiresAt,
+          used: false
+        });
+        document.getElementById('mscInviteCode').textContent = code;
+        document.getElementById('mscInviteExpiry').textContent = 'Code expires in 7 days · share with care';
+        document.getElementById('mscInviteModal').classList.add('on');
+      }catch(e){
+        if(typeof toast === 'function') toast('Could not generate invite');
+      }
+    }
+
+    function _copyInviteCode(){
+      if(!_currentInviteCode) return;
+      const text = _currentInviteCode;
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(() => {
+          if(typeof toast === 'function') toast('Code copied ✦');
+        });
+      } else {
+        /* Fallback */
+        const tmp = document.createElement('textarea');
+        tmp.value = text;
+        document.body.appendChild(tmp);
+        tmp.select();
+        try{ document.execCommand('copy'); }catch(_){}
+        document.body.removeChild(tmp);
+        if(typeof toast === 'function') toast('Code copied ✦');
+      }
+    }
+
+    function _shareInviteCode(){
+      if(!_currentInviteCode) return;
+      const text = 'Join me in Spurana — a sacred sanctuary just for us. My invite code: ' + _currentInviteCode + '\n\nDownload from your soul: https://spurana.vercel.app';
+      if(navigator.share){
+        navigator.share({
+          title: 'Spurana invite',
+          text: text
+        }).catch(()=>{});
+      } else {
+        _copyInviteCode();
+      }
+    }
+
+    function _openAcceptModal(){
+      document.getElementById('mscAcceptInput').value = '';
+      document.getElementById('mscAcceptModal').classList.add('on');
+      setTimeout(() => document.getElementById('mscAcceptInput').focus(), 200);
+    }
+
+    async function _submitAccept(){
+      const code = document.getElementById('mscAcceptInput').value.trim().toUpperCase();
+      if(code.length !== 6){
+        if(typeof toast === 'function') toast('Invite codes are 6 letters');
+        return;
+      }
+      if(typeof db === 'undefined' || !db || !me || !me.uid){
+        if(typeof toast === 'function') toast('Connection unavailable');
+        return;
+      }
+      try{
+        const snap = await db.ref('invites/' + code).once('value');
+        const invite = snap.val();
+        if(!invite){
+          if(typeof toast === 'function') toast('Invite not found');
+          return;
+        }
+        if(invite.used){
+          if(typeof toast === 'function') toast('That invite has been used');
+          return;
+        }
+        if(invite.expiresAt && invite.expiresAt < Date.now()){
+          if(typeof toast === 'function') toast('That invite has expired');
+          return;
+        }
+        if(invite.from === me.uid){
+          if(typeof toast === 'function') toast("You can't accept your own invite");
+          return;
+        }
+        /* Add to both contact lists */
+        const partnerUid = invite.from;
+        const partnerName = invite.fromName || 'Beloved';
+        await db.ref('users/' + me.uid + '/contacts/' + partnerUid).set({
+          name: partnerName,
+          addedAt: Date.now(),
+          viaInvite: code
+        });
+        await db.ref('users/' + partnerUid + '/contacts/' + me.uid).set({
+          name: (typeof myName !== 'undefined' ? myName : 'Soul'),
+          addedAt: Date.now(),
+          viaInvite: code
+        });
+        await db.ref('invites/' + code + '/used').set(true);
+        await db.ref('invites/' + code + '/usedBy').set(me.uid);
+        await db.ref('invites/' + code + '/usedAt').set(Date.now());
+
+        document.getElementById('mscAcceptModal').classList.remove('on');
+        if(typeof toast === 'function') toast('✦ Connected with ' + partnerName);
+        STATE.contacts[partnerUid] = {
+          name: partnerName,
+          addedAt: Date.now(),
+          unread: 0
+        };
+        _renderContacts();
+        _switchConv(partnerUid, partnerName);
+      }catch(e){
+        console.warn('[MSC] Accept failed:', e);
+        if(typeof toast === 'function') toast('Accept failed: ' + e.message);
+      }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BOOTSTRAP — wait for me + db, then init
+       ═══════════════════════════════════════════════════════════════ */
+    async function _bootstrap(){
+      if(typeof db === 'undefined' || !db || typeof me === 'undefined' || !me || !me.uid){
+        return false;
+      }
+      if(STATE.ready) return true;
+
+      _injectUI();
+      _injectMenuButton();
+      _hookMessageSend();
+      _hookAppendMsg();
+
+      /* Load contacts */
+      const contactsSnap = await db.ref('users/' + me.uid + '/contacts').once('value').catch(()=>null);
+      const contactsData = (contactsSnap && contactsSnap.val()) || {};
+
+      /* Auto-import legacy partner if no contacts exist yet */
+      if(Object.keys(contactsData).length === 0){
+        try{
+          const allUsersSnap = await db.ref('users').once('value');
+          const allUsers = allUsersSnap.val() || {};
+          let legacyPartner = null;
+          for(const uid in allUsers){
+            if(uid === me.uid) continue;
+            legacyPartner = { uid, name: allUsers[uid].name || allUsers[uid].displayName || 'Beloved' };
+            break;
+          }
+          if(legacyPartner){
+            await db.ref('users/' + me.uid + '/contacts/' + legacyPartner.uid).set({
+              name: legacyPartner.name,
+              addedAt: Date.now(),
+              legacy: true
+            });
+            contactsData[legacyPartner.uid] = { name: legacyPartner.name, legacy: true };
+            STATE.legacyPartnerUid = legacyPartner.uid;
+          }
+        }catch(_){}
+      } else {
+        /* Find the contact marked legacy */
+        for(const uid in contactsData){
+          if(contactsData[uid].legacy) STATE.legacyPartnerUid = uid;
+        }
+        if(!STATE.legacyPartnerUid){
+          /* Fall back to first contact */
+          STATE.legacyPartnerUid = Object.keys(contactsData)[0];
+        }
+      }
+
+      /* Build state.contacts */
+      Object.keys(contactsData).forEach(uid => {
+        STATE.contacts[uid] = {
+          name: contactsData[uid].name || 'Beloved',
+          addedAt: contactsData[uid].addedAt || 0,
+          unread: 0,
+          lastMsgPreview: '',
+          lastMsgTs: 0
+        };
+      });
+
+      /* Listen for new contacts (when someone accepts our invite) */
+      db.ref('users/' + me.uid + '/contacts').on('child_added', snap => {
+        const uid = snap.key;
+        const data = snap.val() || {};
+        if(STATE.contacts[uid]) return;
+        STATE.contacts[uid] = {
+          name: data.name || 'Beloved',
+          addedAt: data.addedAt || Date.now(),
+          unread: 0,
+          lastMsgPreview: '',
+          lastMsgTs: 0
+        };
+        _renderContacts();
+        if(typeof toast === 'function') toast('✦ ' + STATE.contacts[uid].name + ' has joined');
+      });
+
+      /* Load last-active partner */
+      let lastActive = null;
+      try{ lastActive = localStorage.getItem('spurana_active_partner'); }catch(_){}
+      const startUid = lastActive && STATE.contacts[lastActive] ? lastActive :
+                       STATE.legacyPartnerUid ||
+                       Object.keys(STATE.contacts)[0];
+
+      if(startUid){
+        _switchConv(startUid);
+      }
+
+      /* Listen for conversation last-message updates */
+      db.ref('conversations').on('child_changed', snap => {
+        const convId = snap.key;
+        const lastMsg = (snap.val() || {}).lastMsg;
+        if(!lastMsg) return;
+        const otherUid = convId.split('--').find(u => u !== me.uid);
+        if(otherUid && STATE.contacts[otherUid]){
+          STATE.contacts[otherUid].lastMsgPreview = lastMsg.preview || '';
+          STATE.contacts[otherUid].lastMsgTs = lastMsg.ts || 0;
+          if(otherUid !== STATE.activePartnerUid && lastMsg.uid !== me.uid){
+            STATE.contacts[otherUid].unread = (STATE.contacts[otherUid].unread || 0) + 1;
+            const btn = document.getElementById('mscMenuBtn');
+            if(btn) btn.classList.add('has-unread');
+          }
+          if(document.getElementById('mscPanel') && document.getElementById('mscPanel').classList.contains('on')){
+            _renderContacts();
+          }
+        }
+      });
+
+      STATE.ready = true;
+      console.log('[MSC] Multi-soul ready · contacts:', Object.keys(STATE.contacts).length);
+      return true;
+    }
+
+    let _bootTries = 0;
+    const _bootTimer = setInterval(async () => {
+      _bootTries++;
+      if(await _bootstrap() || _bootTries > 120){
+        clearInterval(_bootTimer);
+      }
+    }, 500);
+
+    /* ═══════════════════════════════════════════════════════════════
+       PUBLIC API
+       ═══════════════════════════════════════════════════════════════ */
+    window._msc = {
+      state: function(){ return JSON.parse(JSON.stringify({
+        activePartnerUid: STATE.activePartnerUid,
+        activeConvId: STATE.activeConvId,
+        activePartnerName: STATE.activePartnerName,
+        contactCount: Object.keys(STATE.contacts).length,
+        contacts: STATE.contacts,
+        legacyPartnerUid: STATE.legacyPartnerUid
+      })); },
+      switchTo: _switchConv,
+      openPanel: _openPanel,
+      closePanel: _closePanel,
+      invite: _openInviteModal,
+      accept: _openAcceptModal,
+      convId: _convId,
+      refresh: _renderContacts
+    };
+
+    if(typeof window.Spurana === 'object' && typeof window.Spurana.registerModule === 'function'){
+      window.Spurana.registerModule({
+        id: 'multi_soul_chat',
+        name: 'Multi-Soul Chat',
+        description: 'Multiple encrypted conversations · invite system · contact list · per-partner E2E',
+        open: _openPanel
+      });
+    }
+
+    console.log('%cSpurana ✦ Multi-Soul Chat infrastructure ready',
+      'background:linear-gradient(135deg,#E8009A,#FF6B9D);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Invite codes: 6 chars, 7-day expiry');
+    console.log('  Try: _msc.invite(), _msc.accept(), _msc.state()');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  MULTI-SOUL FIX + TRACK SOULS                                  ║
+     ║                                                                ║
+     ║  A · Fix the hidden hamburger — make it a guaranteed-visible   ║
+     ║      fixed button at top-left + also add a Sanctuary door so   ║
+     ║      there are TWO entry points to the soul list               ║
+     ║                                                                ║
+     ║  B · TRACK SOULS — live location feature                       ║
+     ║      · Opt-in via Global Settings or Track Souls door          ║
+     ║      · Geolocation API watches your position                   ║
+     ║      · Updates Firebase every 2 minutes (or on big movement)   ║
+     ║      · Reads partner location, renders on Leaflet+OSM map      ║
+     ║      · Shows Haversine distance in km                          ║
+     ║      · "Open in Google Maps" launches directions               ║
+     ║      · Privacy-first: explicit consent, you control sharing    ║
+     ║      · Each contact has independent visibility                 ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function MultiSoulFixAndTrack(){
+    'use strict';
+
+    /* ═══════════════════════════════════════════════════════════════
+       PART A · MULTI-SOUL UI FIX
+       ═══════════════════════════════════════════════════════════════ */
+
+    /* CSS: replace the previously injected hamburger with a guaranteed-
+       visible floating button (high z-index, fixed position). */
+    if(!document.getElementById('mscFixStyles')){
+      const s = document.createElement('style');
+      s.id = 'mscFixStyles';
+      s.textContent = `
+/* Remove the inline-injected one; we'll replace with a floating one */
+#mscMenuBtn.legacy { display: none !important; }
+
+/* New floating hamburger — always visible, always tappable */
+#mscFloat {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0) + 16px);
+  left: calc(env(safe-area-inset-left, 0) + 12px);
+  width: 44px; height: 44px;
+  background: rgba(15,8,22,.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(232,0,154,.4);
+  border-radius: 50%;
+  color: #FFB8D0;
+  font-size: 18px;
+  cursor: pointer;
+  z-index: 99975;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 24px rgba(232,0,154,.25);
+  transition: all .2s;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#mscFloat:hover { transform: scale(1.08); border-color: rgba(232,0,154,.7); }
+#mscFloat:active { transform: scale(0.92); }
+#mscFloat.has-unread::after {
+  content: ''; position: absolute; top: 4px; right: 4px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #FF6B9D;
+  box-shadow: 0 0 10px #FF6B9D;
+  border: 2px solid rgba(15,8,22,.85);
+  animation: mscPulseFix 1.5s ease-in-out infinite;
+}
+@keyframes mscPulseFix { 0%,100%{opacity:.8;transform:scale(.9)} 50%{opacity:1;transform:scale(1.1)} }
+
+/* Hide the floating button if a fullscreen modal is open (don't overlap) */
+body.modal-open #mscFloat,
+body.call-active #mscFloat {
+  display: none;
+}
+
+/* On very tall mobile screens, push it down so it doesn't fight the topbar */
+@media (max-width: 600px){
+  #mscFloat {
+    top: calc(env(safe-area-inset-top, 0) + 60px);
+  }
+}
+
+/* Listen Together chip should yield to the hamburger on the left edge */
+#ltChip {
+  left: 70px !important;
+}
+@media (max-width: 600px){
+  #ltChip { left: 64px !important; }
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* Replace the old hamburger button with a guaranteed-visible one */
+    function _installFloatingMenu(){
+      /* Hide the old injected one */
+      const old = document.getElementById('mscMenuBtn');
+      if(old) old.classList.add('legacy');
+
+      if(document.getElementById('mscFloat')) return;
+      const btn = document.createElement('button');
+      btn.id = 'mscFloat';
+      btn.innerHTML = '☰';
+      btn.setAttribute('aria-label', 'Souls — switch conversation');
+      btn.title = 'Switch conversation';
+      btn.addEventListener('click', function(){
+        if(window._msc && typeof window._msc.openPanel === 'function'){
+          window._msc.openPanel();
+        }
+      });
+      document.body.appendChild(btn);
+
+      /* Mirror the unread state from the old button */
+      const obs = new MutationObserver(() => {
+        const o = document.getElementById('mscMenuBtn');
+        btn.classList.toggle('has-unread', !!(o && o.classList.contains('has-unread')));
+      });
+      if(old) obs.observe(old, { attributes: true, attributeFilter: ['class'] });
+
+      /* Also watch contacts state directly for unread changes */
+      setInterval(() => {
+        if(!window._msc) return;
+        const st = window._msc.state();
+        const anyUnread = st && st.contacts && Object.values(st.contacts).some(c => c.unread > 0);
+        btn.classList.toggle('has-unread', !!anyUnread);
+      }, 2000);
+    }
+
+    /* Inject a Sanctuary door as a second entry point */
+    function _addSanctuaryDoor(){
+      try{
+        if(typeof DOOR_REALMS === 'undefined') return false;
+        const connect = DOOR_REALMS.find(r => r.cat === 'Connect');
+        if(!connect) return false;
+        if(connect.doors.find(d => d.fn === 'openSoulsPanel')) return true;
+        connect.doors.push({ e: '✦', n: 'Souls', fn: 'openSoulsPanel' });
+        return true;
+      }catch(_){ return false; }
+    }
+
+    window.openSoulsPanel = function(){
+      if(window._msc && typeof window._msc.openPanel === 'function'){
+        window._msc.openPanel();
+      }
+    };
+
+    /* ═══════════════════════════════════════════════════════════════
+       PART B · TRACK SOULS — live location + distance + map
+       ═══════════════════════════════════════════════════════════════ */
+
+    const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    const UPDATE_INTERVAL_MS = 2 * 60 * 1000; /* 2 minutes */
+
+    const TS = {
+      sharing: false,           /* am I sharing my location? */
+      watchId: null,            /* navigator.geolocation watch handle */
+      lastSent: 0,
+      myLocation: null,         /* {lat, lng, accuracy, ts} */
+      partnerLocation: null,    /* {lat, lng, accuracy, ts} */
+      map: null,
+      myMarker: null,
+      partnerMarker: null,
+      lineMarker: null,
+      leafletLoaded: false,
+      sendTimer: null,
+      partnerListener: null
+    };
+
+    function _isSharingEnabled(){
+      try{ return localStorage.getItem('spurana_track_sharing') === 'true'; }catch(_){ return false; }
+    }
+    function _setSharingEnabled(v){
+      try{ localStorage.setItem('spurana_track_sharing', String(!!v)); }catch(_){}
+      TS.sharing = !!v;
+    }
+
+    /* Haversine — great-circle distance between two coords in km */
+    function _distanceKm(a, b){
+      if(!a || !b) return null;
+      const R = 6371; /* Earth radius km */
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(b.lat - a.lat);
+      const dLng = toRad(b.lng - a.lng);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const h = Math.sin(dLat/2)**2 + Math.sin(dLng/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+      return 2 * R * Math.asin(Math.sqrt(h));
+    }
+
+    function _formatDistance(km){
+      if(km == null) return '—';
+      if(km < 1) return Math.round(km * 1000) + ' m';
+      if(km < 10) return km.toFixed(2) + ' km';
+      if(km < 100) return km.toFixed(1) + ' km';
+      if(km < 1000) return Math.round(km) + ' km';
+      return Math.round(km).toLocaleString() + ' km';
+    }
+
+    function _formatAgo(ts){
+      if(!ts) return 'never';
+      const diff = Date.now() - ts;
+      if(diff < 60000) return 'just now';
+      if(diff < 3600000) return Math.floor(diff / 60000) + ' min ago';
+      if(diff < 86400000) return Math.floor(diff / 3600000) + ' h ago';
+      return Math.floor(diff / 86400000) + ' d ago';
+    }
+
+    /* ── Lazy-load Leaflet from CDN ── */
+    function _loadLeaflet(){
+      if(TS.leafletLoaded) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const cssEl = document.createElement('link');
+        cssEl.rel = 'stylesheet';
+        cssEl.href = LEAFLET_CSS;
+        cssEl.crossOrigin = '';
+        document.head.appendChild(cssEl);
+        const scriptEl = document.createElement('script');
+        scriptEl.src = LEAFLET_JS;
+        scriptEl.crossOrigin = '';
+        scriptEl.onload = () => { TS.leafletLoaded = true; resolve(); };
+        scriptEl.onerror = () => reject(new Error('Leaflet failed to load'));
+        document.head.appendChild(scriptEl);
+      });
+    }
+
+    /* ── Geolocation watching + Firebase write ── */
+    async function _startSharing(){
+      if(!navigator.geolocation){
+        if(typeof toast === 'function') toast('Geolocation not available');
+        return false;
+      }
+      _setSharingEnabled(true);
+      /* Get one position immediately for instant feedback */
+      navigator.geolocation.getCurrentPosition(_onPosition, _onGeoError, {
+        enableHighAccuracy: true, maximumAge: 30000, timeout: 15000
+      });
+      /* Then watch continuously */
+      if(TS.watchId == null){
+        TS.watchId = navigator.geolocation.watchPosition(_onPosition, _onGeoError, {
+          enableHighAccuracy: false, maximumAge: 60000, timeout: 30000
+        });
+      }
+      /* Force a Firebase send every 2 minutes regardless */
+      if(TS.sendTimer) clearInterval(TS.sendTimer);
+      TS.sendTimer = setInterval(_sendToFirebase, UPDATE_INTERVAL_MS);
+      if(typeof toast === 'function') toast('📍 Location sharing ON');
+      return true;
+    }
+
+    function _stopSharing(){
+      _setSharingEnabled(false);
+      if(TS.watchId != null){
+        navigator.geolocation.clearWatch(TS.watchId);
+        TS.watchId = null;
+      }
+      if(TS.sendTimer){ clearInterval(TS.sendTimer); TS.sendTimer = null; }
+      /* Wipe my location from Firebase */
+      if(typeof db !== 'undefined' && db && typeof me !== 'undefined' && me && me.uid){
+        db.ref('users/' + me.uid + '/location').remove().catch(()=>{});
+      }
+      if(typeof toast === 'function') toast('📍 Location sharing OFF');
+    }
+
+    function _onPosition(pos){
+      TS.myLocation = {
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy,
+        ts: Date.now()
+      };
+      /* Throttle: only send to Firebase if 2 min passed OR moved > 50m */
+      const now = Date.now();
+      let shouldSend = (now - TS.lastSent) > UPDATE_INTERVAL_MS;
+      if(!shouldSend && TS._lastSentLocation){
+        const moved = _distanceKm(TS._lastSentLocation, TS.myLocation);
+        if(moved > 0.05) shouldSend = true; /* 50m */
+      }
+      if(!TS.lastSent) shouldSend = true;
+      if(shouldSend) _sendToFirebase();
+      _refreshMap();
+    }
+
+    function _onGeoError(err){
+      console.warn('[TS] Geolocation error:', err.message);
+      if(err.code === err.PERMISSION_DENIED){
+        if(typeof toast === 'function') toast('Location permission denied');
+        _setSharingEnabled(false);
+      }
+    }
+
+    async function _sendToFirebase(){
+      if(!TS.sharing || !TS.myLocation) return;
+      if(typeof db === 'undefined' || !db || typeof me === 'undefined' || !me || !me.uid) return;
+      try{
+        await db.ref('users/' + me.uid + '/location').set({
+          lat: TS.myLocation.lat,
+          lng: TS.myLocation.lng,
+          accuracy: TS.myLocation.accuracy || 0,
+          ts: TS.myLocation.ts,
+          sharing: true
+        });
+        TS.lastSent = Date.now();
+        TS._lastSentLocation = Object.assign({}, TS.myLocation);
+      }catch(e){ console.warn('[TS] Send failed:', e); }
+    }
+
+    /* ── Listen for partner location updates ── */
+    function _watchPartner(){
+      if(typeof db === 'undefined' || !db) return;
+      if(!window._msc || !window._msc.state) return;
+      const st = window._msc.state();
+      const partnerUid = st.activePartnerUid;
+      if(!partnerUid) return;
+      /* Detach previous listener */
+      if(TS.partnerListener){
+        TS.partnerListener.ref.off('value', TS.partnerListener.cb);
+        TS.partnerListener = null;
+      }
+      const ref = db.ref('users/' + partnerUid + '/location');
+      const cb = snap => {
+        const v = snap.val();
+        if(v && v.sharing && typeof v.lat === 'number' && typeof v.lng === 'number'){
+          TS.partnerLocation = v;
+        } else {
+          TS.partnerLocation = null;
+        }
+        _refreshMap();
+      };
+      ref.on('value', cb);
+      TS.partnerListener = { ref, cb };
+    }
+
+    /* ── Render the Track Souls modal with map ── */
+    if(!document.getElementById('tsStyles')){
+      const s = document.createElement('style');
+      s.id = 'tsStyles';
+      s.textContent = `
+#tsModal {
+  position: fixed; inset: 0; z-index: 99988;
+  background: radial-gradient(ellipse at top, rgba(8,4,14,.96), rgba(0,0,0,.98));
+  display: none; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+#tsModal.on { display: flex; }
+.ts-head {
+  padding: 14px 18px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid rgba(232,0,154,.18);
+  flex-shrink: 0;
+}
+.ts-title {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 17px;
+  letter-spacing: .08em;
+  background: linear-gradient(135deg, #FF6B9D, #E2C28A);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.ts-sub {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 11px;
+  color: rgba(242,235,248,.55);
+  margin-top: 2px;
+}
+.ts-close {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.15);
+  color: #F2EBF8;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  cursor: pointer; font-size: 14px;
+}
+#tsMap {
+  flex: 1;
+  width: 100%;
+  background: #0a0a0a;
+  position: relative;
+}
+.ts-overlay-stats {
+  position: absolute;
+  top: 12px; left: 12px; right: 12px;
+  z-index: 1000;
+  background: rgba(15,8,22,.85);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(232,0,154,.3);
+  border-radius: 14px;
+  padding: 12px 16px;
+  pointer-events: none;
+}
+.ts-stat-row {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px;
+}
+.ts-stat-distance {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 24px;
+  background: linear-gradient(135deg, #FF6B9D, #E2C28A);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-align: center;
+}
+.ts-stat-label {
+  font-family: 'Orbitron', monospace;
+  font-size: 9px;
+  letter-spacing: .25em;
+  color: rgba(242,235,248,.55);
+  text-transform: uppercase;
+  margin-top: 2px;
+  text-align: center;
+}
+.ts-stat-meta {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 11px;
+  color: rgba(255,184,208,.65);
+  margin-top: 6px;
+  text-align: center;
+}
+.ts-controls {
+  padding: 12px 16px;
+  display: flex; gap: 10px; flex-wrap: wrap;
+  background: rgba(15,8,22,.85);
+  border-top: 1px solid rgba(232,0,154,.18);
+  flex-shrink: 0;
+}
+.ts-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(232,0,154,.2), rgba(232,0,154,.08));
+  border: 1px solid rgba(232,0,154,.35);
+  color: #FFB8D0;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-align: center;
+  transition: all .2s;
+  touch-action: manipulation;
+}
+.ts-btn:hover { background: linear-gradient(135deg, rgba(232,0,154,.32), rgba(232,0,154,.18)); }
+.ts-btn:active { transform: scale(0.97); }
+.ts-btn.on {
+  background: linear-gradient(135deg, #22C55E, #10B981);
+  color: #fff;
+  border-color: rgba(34,197,94,.5);
+}
+.ts-btn.directions {
+  background: linear-gradient(135deg, #3B82F6, #2563EB);
+  color: #fff;
+  border-color: rgba(59,130,246,.5);
+}
+
+.ts-empty {
+  position: absolute;
+  inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column;
+  padding: 40px;
+  text-align: center;
+  pointer-events: none;
+}
+.ts-empty-icon { font-size: 64px; margin-bottom: 16px; opacity: 0.5; }
+.ts-empty-title {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 18px;
+  color: #F2EBF8;
+  letter-spacing: .06em;
+  margin-bottom: 8px;
+}
+.ts-empty-desc {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: rgba(242,235,248,.6);
+  line-height: 1.6;
+  max-width: 320px;
+}
+
+/* Leaflet styling overrides for dark theme */
+.leaflet-container { background: #0a0a0a !important; }
+.leaflet-tile-pane { filter: invert(0.85) hue-rotate(180deg) saturate(0.6); }
+.leaflet-control-attribution {
+  background: rgba(15,8,22,.7) !important;
+  color: rgba(242,235,248,.5) !important;
+  font-size: 9px !important;
+}
+.leaflet-control-attribution a { color: rgba(232,0,154,.7) !important; }
+.leaflet-control-zoom a {
+  background: rgba(15,8,22,.85) !important;
+  color: #FFB8D0 !important;
+  border-color: rgba(232,0,154,.3) !important;
+}
+.ts-marker-me {
+  background: #34D399; width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 0 14px rgba(52,211,153,.9), 0 0 30px rgba(52,211,153,.4);
+}
+.ts-marker-partner {
+  background: #E8009A; width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 0 14px rgba(232,0,154,.9), 0 0 30px rgba(232,0,154,.4);
+  animation: tsPulsePartner 1.8s ease-in-out infinite;
+}
+@keyframes tsPulsePartner { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
+      `;
+      document.head.appendChild(s);
+    }
+
+    function _injectModal(){
+      if(document.getElementById('tsModal')) return;
+      const m = document.createElement('div');
+      m.id = 'tsModal';
+      m.innerHTML = `
+        <div class="ts-head">
+          <div>
+            <div class="ts-title">✦ Track Souls</div>
+            <div class="ts-sub" id="tsSubLabel">Live distance to your beloved</div>
+          </div>
+          <button class="ts-close" onclick="document.getElementById('tsModal').classList.remove('on');window._ts && window._ts._onClose && window._ts._onClose()" aria-label="Close">✕</button>
+        </div>
+        <div id="tsMap">
+          <div class="ts-overlay-stats" id="tsStats">
+            <div class="ts-stat-distance" id="tsDistance">—</div>
+            <div class="ts-stat-label">Distance Between Souls</div>
+            <div class="ts-stat-meta" id="tsLastUpdate">Waiting for locations…</div>
+          </div>
+          <div class="ts-empty" id="tsEmpty">
+            <div class="ts-empty-icon">📍</div>
+            <div class="ts-empty-title">Begin sharing</div>
+            <div class="ts-empty-desc">Tap "Share My Location" below to start. Your beloved must also turn it on for the map to come alive.</div>
+          </div>
+        </div>
+        <div class="ts-controls">
+          <button class="ts-btn" id="tsShareBtn">📍 Share My Location</button>
+          <button class="ts-btn directions" id="tsDirBtn">🧭 Get Directions</button>
+        </div>
+      `;
+      document.body.appendChild(m);
+
+      document.getElementById('tsShareBtn').addEventListener('click', _toggleSharing);
+      document.getElementById('tsDirBtn').addEventListener('click', _openDirections);
+    }
+
+    function _toggleSharing(){
+      if(TS.sharing) _stopSharing();
+      else _startSharing();
+      _refreshStats();
+    }
+
+    function _openDirections(){
+      if(!TS.myLocation || !TS.partnerLocation){
+        if(typeof toast === 'function') toast('Need both locations to route');
+        return;
+      }
+      const url = 'https://www.google.com/maps/dir/?api=1' +
+        '&origin=' + TS.myLocation.lat + ',' + TS.myLocation.lng +
+        '&destination=' + TS.partnerLocation.lat + ',' + TS.partnerLocation.lng +
+        '&travelmode=driving';
+      window.open(url, '_blank');
+    }
+
+    async function _openModal(){
+      _injectModal();
+      document.getElementById('tsModal').classList.add('on');
+      /* Update share button state */
+      const btn = document.getElementById('tsShareBtn');
+      if(btn){
+        btn.classList.toggle('on', TS.sharing);
+        btn.textContent = TS.sharing ? '📍 Sharing Live · Tap to Stop' : '📍 Share My Location';
+      }
+      _watchPartner();
+      /* Load map */
+      try{
+        await _loadLeaflet();
+        _initMap();
+        if(TS.sharing && !TS.myLocation){
+          /* Force a refresh */
+          navigator.geolocation.getCurrentPosition(_onPosition, _onGeoError, {
+            enableHighAccuracy: true, maximumAge: 0, timeout: 15000
+          });
+        }
+        _refreshMap();
+      }catch(e){
+        if(typeof toast === 'function') toast('Map failed to load');
+      }
+    }
+
+    function _initMap(){
+      if(TS.map) return;
+      if(!window.L) return;
+      TS.map = L.map('tsMap', {
+        zoomControl: true,
+        attributionControl: true
+      }).setView([23.8103, 90.4125], 11); /* Default: Dhaka */
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(TS.map);
+    }
+
+    function _refreshMap(){
+      if(!TS.map || !window.L) return;
+      const me = TS.myLocation;
+      const them = TS.partnerLocation;
+      const empty = document.getElementById('tsEmpty');
+
+      if(me){
+        const ico = L.divIcon({ className: 'ts-marker-me', iconSize: [22, 22] });
+        if(TS.myMarker){
+          TS.myMarker.setLatLng([me.lat, me.lng]);
+        } else {
+          TS.myMarker = L.marker([me.lat, me.lng], { icon: ico, title: 'You' }).addTo(TS.map);
+        }
+      }
+      if(them){
+        const ico = L.divIcon({ className: 'ts-marker-partner', iconSize: [22, 22] });
+        if(TS.partnerMarker){
+          TS.partnerMarker.setLatLng([them.lat, them.lng]);
+        } else {
+          TS.partnerMarker = L.marker([them.lat, them.lng], { icon: ico, title: 'Beloved' }).addTo(TS.map);
+        }
+      }
+      if(me && them){
+        if(TS.lineMarker) TS.map.removeLayer(TS.lineMarker);
+        TS.lineMarker = L.polyline([[me.lat, me.lng], [them.lat, them.lng]], {
+          color: '#E8009A', weight: 2, opacity: 0.6, dashArray: '8 6'
+        }).addTo(TS.map);
+        /* Fit bounds */
+        const bounds = L.latLngBounds([[me.lat, me.lng], [them.lat, them.lng]]);
+        TS.map.fitBounds(bounds, { padding: [80, 80], maxZoom: 14 });
+      } else if(me){
+        TS.map.setView([me.lat, me.lng], 13);
+      } else if(them){
+        TS.map.setView([them.lat, them.lng], 13);
+      }
+      if(empty){
+        empty.style.display = (me || them) ? 'none' : 'flex';
+      }
+      _refreshStats();
+    }
+
+    function _refreshStats(){
+      const distEl = document.getElementById('tsDistance');
+      const upEl = document.getElementById('tsLastUpdate');
+      if(TS.myLocation && TS.partnerLocation){
+        const km = _distanceKm(TS.myLocation, TS.partnerLocation);
+        if(distEl) distEl.textContent = _formatDistance(km);
+        if(upEl) upEl.textContent = 'Your beloved · updated ' + _formatAgo(TS.partnerLocation.ts);
+      } else if(TS.myLocation){
+        if(distEl) distEl.textContent = '—';
+        if(upEl) upEl.textContent = 'Waiting for your beloved to share their location…';
+      } else if(TS.partnerLocation){
+        if(distEl) distEl.textContent = '—';
+        if(upEl) upEl.textContent = 'Tap "Share My Location" to see the distance';
+      } else {
+        if(distEl) distEl.textContent = '—';
+        if(upEl) upEl.textContent = 'Waiting for locations…';
+      }
+      const btn = document.getElementById('tsShareBtn');
+      if(btn){
+        btn.classList.toggle('on', TS.sharing);
+        btn.textContent = TS.sharing ? '📍 Sharing Live · Tap to Stop' : '📍 Share My Location';
+      }
+    }
+
+    /* Refresh stats once a minute for "X min ago" timer freshness */
+    setInterval(() => {
+      if(document.getElementById('tsModal') && document.getElementById('tsModal').classList.contains('on')){
+        _refreshStats();
+      }
+    }, 60000);
+
+    /* Public open */
+    window.openTrackSouls = _openModal;
+
+    /* Inject as a Sanctuary door */
+    function _addTrackSoulsDoor(){
+      try{
+        if(typeof DOOR_REALMS === 'undefined') return false;
+        const connect = DOOR_REALMS.find(r => r.cat === 'Connect');
+        if(!connect) return false;
+        if(connect.doors.find(d => d.fn === 'openTrackSouls')) return true;
+        connect.doors.push({ e: '🧭', n: 'Track Souls', fn: 'openTrackSouls' });
+        return true;
+      }catch(_){ return false; }
+    }
+
+    /* Restart partner watcher whenever the active conversation changes */
+    let _lastPartner = null;
+    setInterval(() => {
+      if(!window._msc) return;
+      const st = window._msc.state();
+      if(st && st.activePartnerUid && st.activePartnerUid !== _lastPartner){
+        _lastPartner = st.activePartnerUid;
+        _watchPartner();
+      }
+    }, 3000);
+
+    /* Resume sharing if user previously had it enabled */
+    if(_isSharingEnabled()){
+      TS.sharing = true;
+      setTimeout(_startSharing, 3000);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       Bootstrap — wait for app then install fixes + doors
+       ═══════════════════════════════════════════════════════════════ */
+    let _bootTries = 0;
+    const _bootTimer = setInterval(() => {
+      _bootTries++;
+      _installFloatingMenu();
+      _addSanctuaryDoor();
+      _addTrackSoulsDoor();
+      if(_bootTries > 60) clearInterval(_bootTimer);
+    }, 500);
+
+    /* ═══════════════════════════════════════════════════════════════
+       Public APIs
+       ═══════════════════════════════════════════════════════════════ */
+    window._ts = {
+      open: _openModal,
+      sharing: function(){ return TS.sharing; },
+      start: _startSharing,
+      stop: _stopSharing,
+      myLocation: function(){ return TS.myLocation; },
+      partnerLocation: function(){ return TS.partnerLocation; },
+      distanceKm: function(){ return TS.myLocation && TS.partnerLocation ? _distanceKm(TS.myLocation, TS.partnerLocation) : null; },
+      _onClose: function(){ /* keep watching even if closed — partner can come online */ }
+    };
+
+    if(typeof window.Spurana === 'object' && typeof window.Spurana.registerModule === 'function'){
+      window.Spurana.registerModule({
+        id: 'track_souls',
+        name: 'Track Souls',
+        description: 'Live location sharing · Leaflet+OSM map · Haversine distance · Google Maps directions',
+        open: _openModal
+      });
+    }
+
+    console.log('%cSpurana ✦ Track Souls + Multi-Soul UI Fix online',
+      'background:linear-gradient(135deg,#22C55E,#3ECF8E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Floating ☰ hamburger installed (top-left, z-index 99975)');
+    console.log('  Sanctuary → Connect → ✦ Souls + 🧭 Track Souls doors added');
+    console.log('  Try: _ts.open(), _ts.start(), _ts.distanceKm()');
+  })();
+
+
+
 
 
 

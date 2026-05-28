@@ -1,5 +1,5 @@
 /* Spurana Service Worker · Beta Green L 1 (build: callpro-notify) */
-const VERSION = 'beta-green-l1-callpro-notify';
+const VERSION = 'beta-green-l1-tracksouls';
 const CACHE = `spurana-${VERSION}`;
 const CORE = ['/', '/index.html', '/manifest.json'];
 

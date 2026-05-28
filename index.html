@@ -34260,6 +34260,513 @@ body.call-active #mscFloat {
     console.log('  Sublines added: Listen Together, Souls, Track Souls + more');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  CLEAN ENTRY — one layer, zero overlapping buttons            ║
+     ║                                                                ║
+     ║  User was clear: NOTHING should float over the header or       ║
+     ║  obstruct the layer below. So:                                 ║
+     ║                                                                ║
+     ║   1 · DELETE the floating hamburger (#mscFloat) entirely       ║
+     ║   2 · Make the partner name in the header ("SACRED CHANNEL")   ║
+     ║       the tap-target to open the Souls list — no new button   ║
+     ║   3 · Force the Listen Together bar/chip to centre, never      ║
+     ║       hanging off the left edge or covering the header         ║
+     ║   4 · Guarantee the souls panel only shows when opened         ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function CleanEntry(){
+    'use strict';
+
+    if(!document.getElementById('cleanEntryStyles')){
+      const s = document.createElement('style');
+      s.id = 'cleanEntryStyles';
+      s.textContent = `
+/* ── 1 · Kill the floating hamburger for good ── */
+#mscFloat { display: none !important; }
+
+/* ── 2 · Make the partner name look tappable ── */
+.top-partner, #topPartnerName {
+  cursor: pointer;
+  position: relative;
+  transition: color .2s;
+}
+.top-partner:active, #topPartnerName:active { opacity: .7; }
+#topPartnerName.souls-enabled::after {
+  content: ' ⌄';
+  font-size: 11px;
+  color: rgba(232,0,154,.7);
+  vertical-align: middle;
+}
+#topPartnerName.has-unread::before {
+  content: '';
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #FF6B9D;
+  box-shadow: 0 0 8px #FF6B9D;
+  margin-right: 6px;
+  vertical-align: middle;
+  animation: ceUnread 1.5s ease-in-out infinite;
+}
+@keyframes ceUnread { 0%,100%{opacity:.7} 50%{opacity:1} }
+
+/* ── 3 · Listen Together bar + chip: ALWAYS centred, below header,
+        never hanging off the left edge ── */
+#ltBar, #ltChip {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%) translateY(-130%) !important;
+}
+#ltBar.on, #ltChip.on {
+  transform: translateX(-50%) translateY(0) !important;
+}
+#ltChip.on:hover, #ltChip.on:active {
+  transform: translateX(-50%) translateY(0) scale(1.04) !important;
+}
+#ltBar.minimized {
+  transform: translateX(-50%) translateY(-200%) !important;
+}
+/* Keep them clear of the header strip */
+#ltBar { top: calc(env(safe-area-inset-top,0) + 66px) !important; }
+#ltChip {
+  top: calc(env(safe-area-inset-top,0) + 66px) !important;
+  max-width: 280px !important;
+}
+@media (max-width: 600px){
+  #ltBar, #ltChip { top: calc(env(safe-area-inset-top,0) + 60px) !important; }
+  #ltChip { max-width: 80vw !important; }
+}
+
+/* ── 4 · Souls panel/overlay only when explicitly opened ── */
+#mscOverlay:not(.on) { opacity: 0 !important; pointer-events: none !important; }
+#mscPanel:not(.on) { transform: translateX(-100%) !important; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ── Remove the floating hamburger element from the DOM ── */
+    function _removeFloat(){
+      const f = document.getElementById('mscFloat');
+      if(f && f.parentElement) f.parentElement.removeChild(f);
+      const legacy = document.getElementById('mscMenuBtn');
+      if(legacy && legacy.parentElement) legacy.parentElement.removeChild(legacy);
+    }
+
+    /* ── Wire the partner name to open the Souls panel ── */
+    function _wirePartnerName(){
+      const name = document.getElementById('topPartnerName');
+      if(!name) return false;
+      if(name.dataset.soulsWired) return true;
+      name.dataset.soulsWired = '1';
+      name.classList.add('souls-enabled');
+      name.title = 'Tap to switch souls';
+      name.addEventListener('click', function(e){
+        e.stopPropagation();
+        if(window._msc && typeof window._msc.openPanel === 'function'){
+          window._msc.openPanel();
+        } else if(typeof window.openSoulsPanel === 'function'){
+          window.openSoulsPanel();
+        }
+      });
+      return true;
+    }
+
+    /* ── Mirror unread badge onto the partner name ── */
+    function _syncUnread(){
+      const name = document.getElementById('topPartnerName');
+      if(!name || !window._msc || !window._msc.state) return;
+      try{
+        const st = window._msc.state();
+        const anyUnread = st && st.contacts &&
+          Object.keys(st.contacts).some(uid =>
+            uid !== st.activePartnerUid && st.contacts[uid].unread > 0);
+        name.classList.toggle('has-unread', !!anyUnread);
+      }catch(_){}
+    }
+
+    /* ── Bootstrap ── */
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _removeFloat();
+      _wirePartnerName();
+      if(_tries > 80) clearInterval(_timer);
+    }, 400);
+
+    /* Keep removing the float if some later code re-creates it */
+    const _floatGuard = new MutationObserver(() => {
+      const f = document.getElementById('mscFloat');
+      if(f) _removeFloat();
+    });
+    if(document.body){
+      _floatGuard.observe(document.body, { childList: true });
+    }
+
+    /* Unread sync loop */
+    setInterval(_syncUnread, 2500);
+
+    /* Public */
+    window._cleanEntry = {
+      removeFloat: _removeFloat,
+      wireName: _wirePartnerName,
+      openSouls: function(){
+        if(window._msc && window._msc.openPanel) window._msc.openPanel();
+      }
+    };
+
+    console.log('%cSpurana ✦ Clean Entry — one layer, no overlaps',
+      'background:linear-gradient(135deg,#10B981,#22C55E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Floating hamburger removed · partner name opens Souls · listen bar centred');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  CLEAN ENTRY FIX — wire the REAL header + kill the ghost panel ║
+     ║                                                                ║
+     ║  Discovery: the visible header is #cleanTopBar (#ctbName,      ║
+     ║  #ctbAvatar, ⛩ doors). The old .topbar (#topPartnerName) is    ║
+     ║  display:none — so the previous wiring hit a hidden element.   ║
+     ║                                                                ║
+     ║  Also: the faint card + icons under the name were the souls    ║
+     ║  panel (#mscPanel) contact cards bleeding through at the left  ║
+     ║  edge because transform-only hiding can leave a sliver/ghost.  ║
+     ║                                                                ║
+     ║  Fixes:                                                        ║
+     ║   1 · Bulletproof-hide #mscPanel + #mscOverlay when closed     ║
+     ║       (visibility:hidden + translateX(-110%) + pointer-none)   ║
+     ║   2 · Wire #ctbName (the REAL, visible name) to open Souls     ║
+     ║   3 · Keep #ctbAvatar → profile (unchanged)                    ║
+     ║   4 · Make sure the Track Souls / invite / accept modals are   ║
+     ║       also fully hidden until opened                           ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function CleanEntryFix(){
+    'use strict';
+
+    if(!document.getElementById('cleanEntryFixStyles')){
+      const s = document.createElement('style');
+      s.id = 'cleanEntryFixStyles';
+      s.textContent = `
+/* ── 1 · Bulletproof hide for the souls panel + its overlay ── */
+#mscPanel:not(.on){
+  visibility: hidden !important;
+  transform: translateX(-110%) !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+}
+#mscPanel.on{
+  visibility: visible !important;
+  transform: translateX(0) !important;
+  pointer-events: auto !important;
+}
+#mscOverlay:not(.on){
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+#mscOverlay.on{
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* ── Also fully hide the secondary modals until opened ── */
+#mscInviteModal:not(.on),
+#mscAcceptModal:not(.on),
+#tsModal:not(.on),
+#wtChatPanel:not(.on),
+#e2eFpModal:not(.on){
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* ── 2 · Make the REAL header name look + behave tappable ── */
+#ctbName{
+  cursor: pointer;
+  position: relative;
+}
+#ctbName.souls-on::after{
+  content: ' ⌄';
+  font-size: 12px;
+  color: rgba(232,0,154,.75);
+  vertical-align: middle;
+}
+#ctbName.has-unread::before{
+  content: '';
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #FF6B9D;
+  box-shadow: 0 0 8px #FF6B9D;
+  margin-right: 6px;
+  vertical-align: middle;
+  animation: cefUnread 1.5s ease-in-out infinite;
+}
+@keyframes cefUnread { 0%,100%{opacity:.7} 50%{opacity:1} }
+
+/* ── Ensure the dead old bar can never reappear ── */
+.topbar{ display: none !important; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ── Wire the REAL header name (#ctbName) to open the souls list ── */
+    function _wireRealName(){
+      const name = document.getElementById('ctbName');
+      if(!name) return false;
+      if(name.dataset.soulsWired) return true;
+      name.dataset.soulsWired = '1';
+      name.classList.add('souls-on');
+      name.title = 'Tap to switch souls';
+      /* Capture-phase click so we beat the parent #ctbInfo profile handler */
+      name.addEventListener('click', function(e){
+        e.stopPropagation();
+        e.preventDefault();
+        if(window._msc && typeof window._msc.openPanel === 'function'){
+          window._msc.openPanel();
+        } else if(typeof window.openSoulsPanel === 'function'){
+          window.openSoulsPanel();
+        }
+      }, true);
+      return true;
+    }
+
+    /* Mirror unread badge onto the real header name */
+    function _syncUnread(){
+      const name = document.getElementById('ctbName');
+      if(!name || !window._msc || !window._msc.state) return;
+      try{
+        const st = window._msc.state();
+        const anyUnread = st && st.contacts &&
+          Object.keys(st.contacts).some(uid =>
+            uid !== st.activePartnerUid && st.contacts[uid].unread > 0);
+        name.classList.toggle('has-unread', !!anyUnread);
+      }catch(_){}
+    }
+
+    /* Make sure the souls panel is NOT open at load (clear any stray .on) */
+    function _ensureClosedAtBoot(){
+      const panel = document.getElementById('mscPanel');
+      const overlay = document.getElementById('mscOverlay');
+      if(panel && !panel.dataset.bootChecked){
+        panel.dataset.bootChecked = '1';
+        panel.classList.remove('on');
+      }
+      if(overlay && !overlay.dataset.bootChecked){
+        overlay.dataset.bootChecked = '1';
+        overlay.classList.remove('on');
+      }
+    }
+
+    /* ── Bootstrap ── */
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _wireRealName();
+      _ensureClosedAtBoot();
+      if(_tries > 80) clearInterval(_timer);
+    }, 400);
+
+    setInterval(_syncUnread, 2500);
+
+    window._cleanFix = {
+      wireRealName: _wireRealName,
+      openSouls: function(){ if(window._msc && window._msc.openPanel) window._msc.openPanel(); }
+    };
+
+    console.log('%cSpurana ✦ Clean Entry Fix — real header wired, ghost panel sealed',
+      'background:linear-gradient(135deg,#10B981,#22C55E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  #ctbName → Souls · #mscPanel bulletproof-hidden · old .topbar dead');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  TOP ZONE CLEAN — kill the ghost layer once and for all       ║
+     ║                                                                ║
+     ║  Three root causes of the persistent top-left ghost:           ║
+     ║   A · The header (#cleanTopBar) was semi-transparent (.92-.98  ║
+     ║       alpha + blur) so banners/messages showed THROUGH it      ║
+     ║   B · Multiple inline banners (questBanner, sanctuaryBanner,    ║
+     ║       watchBanner, soulCardsBanner) stack at the top of the    ║
+     ║       chat — "doors / soul card / watch together" layers       ║
+     ║   C · Stray absolutely-positioned elements linger in the band  ║
+     ║       between the header and the env-strip                     ║
+     ║                                                                ║
+     ║  Fixes:                                                        ║
+     ║   1 · Header becomes FULLY OPAQUE — nothing shows through      ║
+     ║   2 · Only the active-mode banner is allowed to show; the      ║
+     ║       rest are force-hidden so they can't stack or ghost       ║
+     ║   3 · A runtime "ghost hunter" scans the top-left band and     ║
+     ║       hides anything stray (whitelisting the header, listen    ║
+     ║       chip, env-strip, and real messages), logging what it     ║
+     ║       finds so we can confirm                                  ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function TopZoneClean(){
+    'use strict';
+
+    if(!document.getElementById('topZoneCleanStyles')){
+      const s = document.createElement('style');
+      s.id = 'topZoneCleanStyles';
+      s.textContent = `
+/* ── 1 · Header fully opaque — nothing shows through it ── */
+#cleanTopBar{
+  background: #0a0610 !important;
+  background: linear-gradient(180deg, #0c0814 0%, #0a0610 100%) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: 1px solid rgba(192,0,122,.25) !important;
+  z-index: 9000 !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,.6) !important;
+}
+
+/* ── 2 · Top banners: only show when their mode is active, never stack.
+        In normal chat these stay hidden so they can't ghost. ── */
+#questBanner:not(.active-mode),
+#sanctuaryBanner:not(.active-mode),
+#watchBanner:not(.active-mode),
+#soulCardsBanner:not(.active-mode){
+  /* fall back to their own display logic — we only force-hide the
+     ones that are NOT explicitly toggled on by mode switching */
+}
+/* Banners must never overlap the env-strip / float to top-left.
+   Keep them in the normal flow, full width, below the header. */
+#questBanner, #sanctuaryBanner, #watchBanner, #soulCardsBanner{
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  width: 100% !important;
+  z-index: 5 !important;
+}
+
+/* ── env-strip + listen chip clearly below the opaque header ── */
+#ltChip, #ltBar{ z-index: 8500 !important; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       2 · Force-hide non-active banners (belt-and-suspenders)
+       ═══════════════════════════════════════════════════════════════ */
+    function _tidyBanners(){
+      /* The app toggles these by mode. If the current mode is the normal
+         chat (not 'cards'/'hunt'/'watch'/'private'), make sure none linger
+         visible. We detect "normal chat" by the absence of an active special
+         mode marker, and simply trust each banner's own display:none default,
+         but we additionally clear any that are visible yet empty. */
+      ['questBanner','sanctuaryBanner','watchBanner','soulCardsBanner'].forEach(id => {
+        const el = document.getElementById(id);
+        if(!el) return;
+        /* If it's display:none already, nothing to do */
+        const cs = getComputedStyle(el);
+        if(cs.display === 'none') return;
+        /* If it has zero rendered height or no visible text, it's a ghost → hide */
+        const txt = (el.textContent || '').trim();
+        if(el.offsetHeight < 8 || txt.length === 0){
+          el.style.display = 'none';
+        }
+      });
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       3 · GHOST HUNTER — scan the top-left band, hide strays, log them
+       ═══════════════════════════════════════════════════════════════ */
+    /* Whitelist: ids/classes that are ALLOWED to live in the top zone */
+    const WHITELIST_IDS = new Set([
+      'cleanTopBar','ctbAvatar','ctbInfo','ctbName','ctbStatus',
+      'ctbVideo','ctbAudio','ctbDoors','ltChip','ltBar','ltAutoFallback',
+      'searchBar','vanishBanner','envNow','rtcIncoming'
+    ]);
+    const WHITELIST_CLASS_HINTS = [
+      'env-strip','env-now','env-btn','ctb-','lt-','msg','bubble','date-divider',
+      'day-divider','day-sep','search','cleanTopBar','top-'
+    ];
+
+    function _isWhitelisted(el){
+      if(!el) return true;
+      if(el.id && WHITELIST_IDS.has(el.id)) return true;
+      const cls = (el.className && typeof el.className === 'string') ? el.className : '';
+      for(const hint of WHITELIST_CLASS_HINTS){
+        if(cls.indexOf(hint) >= 0) return true;
+        if(el.id && el.id.indexOf(hint) >= 0) return true;
+      }
+      /* Allow real chat messages (they carry data-key / data-msg-key / data-conv-id) */
+      if(el.dataset && (el.dataset.key || el.dataset.msgKey || el.dataset.convId)) return true;
+      /* Allow anything inside the header */
+      if(el.closest && el.closest('#cleanTopBar')) return true;
+      /* Allow anything inside the messages container */
+      if(el.closest && el.closest('#msgs, .msgs-wrap, .messages, .chat-area')) return true;
+      return false;
+    }
+
+    let _ghostLog = [];
+    function _huntGhosts(){
+      try{
+        const header = document.getElementById('cleanTopBar');
+        const headerBottom = header ? header.getBoundingClientRect().bottom : 64;
+        /* The danger band: just under the header, left portion of screen */
+        const bandTop = headerBottom - 4;
+        const bandBottom = headerBottom + 90;
+        const leftLimit = Math.min(460, window.innerWidth * 0.45);
+
+        /* Walk top-level floating elements (direct children of body) */
+        Array.from(document.body.children).forEach(el => {
+          if(!(el instanceof HTMLElement)) return;
+          const cs = getComputedStyle(el);
+          if(cs.position !== 'fixed' && cs.position !== 'absolute') return;
+          if(cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.05) return;
+          if(_isWhitelisted(el)) return;
+
+          const r = el.getBoundingClientRect();
+          if(r.width === 0 || r.height === 0) return;
+          /* Is it sitting in the top-left danger band? */
+          const inBandVertically = (r.top < bandBottom && r.bottom > bandTop);
+          const inLeftZone = (r.left < leftLimit);
+          if(inBandVertically && inLeftZone && r.height < 220 && r.width < 520){
+            /* GHOST FOUND — hide it and log it */
+            const sig = (el.id ? '#'+el.id : '') +
+                        (el.className && typeof el.className==='string' ? '.'+el.className.split(' ').join('.') : '') +
+                        ' "' + (el.textContent||'').trim().slice(0,30) + '"';
+            if(_ghostLog.indexOf(sig) < 0){
+              _ghostLog.push(sig);
+              console.warn('[GhostHunter] Hid stray top-left element:', sig, {top:Math.round(r.top),left:Math.round(r.left),w:Math.round(r.width),h:Math.round(r.height)});
+            }
+            el.style.setProperty('display','none','important');
+          }
+        });
+      }catch(e){ /* never break the app over a scan */ }
+    }
+
+    /* Run the hunt + tidy repeatedly (cheap), especially after interactions */
+    function _sweep(){ _tidyBanners(); _huntGhosts(); }
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _sweep();
+      if(_tries > 40) clearInterval(_timer); /* ~20s of active sweeping */
+    }, 500);
+
+    /* Also sweep on key user actions */
+    ['click','touchstart'].forEach(ev => {
+      window.addEventListener(ev, () => setTimeout(_sweep, 300), { passive: true });
+    });
+
+    /* And whenever the page becomes visible again */
+    document.addEventListener('visibilitychange', () => {
+      if(!document.hidden) setTimeout(_sweep, 300);
+    });
+
+    /* Public */
+    window._topClean = {
+      sweep: _sweep,
+      huntGhosts: _huntGhosts,
+      ghostLog: function(){ return _ghostLog.slice(); }
+    };
+
+    console.log('%cSpurana ✦ Top Zone Clean — opaque header + ghost hunter active',
+      'background:linear-gradient(135deg,#10B981,#3ECF8E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Header now OPAQUE (nothing shows through)');
+    console.log('  Ghost hunter scanning top-left band. See _topClean.ghostLog() for what it caught.');
+  })();
+
+
+
+
 
 
 

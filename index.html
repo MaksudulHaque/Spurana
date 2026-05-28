@@ -34764,6 +34764,410 @@ body.call-active #mscFloat {
     console.log('  Ghost hunter scanning top-left band. See _topClean.ghostLog() for what it caught.');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  GHOST KILLER FINAL — catch it by POSITION, not by name        ║
+     ║                                                                ║
+     ║  The stray pill at the top-left kept surviving because earlier ║
+     ║  sweeps whitelisted the listen elements (#ltBar/#ltChip).      ║
+     ║                                                                ║
+     ║  New strategy:                                                 ║
+     ║   · The ONLY legit element in that band is the CENTERED chip   ║
+     ║     ("BELOVED IS LISTENING") — its centre-x is near viewport   ║
+     ║     centre. Anything pill/box-shaped sitting on the LEFT of    ║
+     ║     the band is a ghost.                                       ║
+     ║   · Force #ltBar to display:none unless it's explicitly .on    ║
+     ║     (so a half-shown bar can never linger).                    ║
+     ║   · Persistent scan (not time-limited) of every fixed/absolute ║
+     ║     element; kill anything in the top-left band whose centre   ║
+     ║     is NOT near the viewport centre. Log what it kills.        ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function GhostKillerFinal(){
+    'use strict';
+
+    if(!document.getElementById('ghostKillerStyles')){
+      const s = document.createElement('style');
+      s.id = 'ghostKillerStyles';
+      s.textContent = `
+/* The full listen bar may ONLY appear when explicitly opened (.on).
+   Otherwise it is fully removed from paint — no half-shown lingering. */
+#ltBar:not(.on){
+  display: none !important;
+}
+#ltBar.on{
+  display: flex !important;
+}
+
+/* Keep the chip centred no matter what any older rule says */
+#ltChip{
+  left: 50% !important;
+  right: auto !important;
+}
+#ltChip:not(.on){
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+@media (max-width: 600px){
+  #ltChip{ left: 50% !important; }
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    let _killLog = [];
+
+    function _killTopLeftGhosts(){
+      try{
+        const header = document.getElementById('cleanTopBar');
+        const headerBottom = header ? header.getBoundingClientRect().bottom : 64;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const center = vw / 2;
+
+        /* Danger band: from just under the header down ~120px */
+        const bandTop = headerBottom - 6;
+        const bandBottom = headerBottom + 120;
+
+        /* Scan every positioned element (scoped to those likely to float) */
+        const all = document.querySelectorAll('body > *, body > * > *');
+        all.forEach(el => {
+          if(!(el instanceof HTMLElement)) return;
+
+          /* Never touch the header, messages, env-strip, or composer */
+          if(el.closest('#cleanTopBar')) return;
+          if(el.closest('#msgs, .msgs-wrap, .messages, .chat-area')) return;
+          if(el.closest('.env-strip, .env-now')) return;
+          if(el.closest('.inp-row, .composer, .input-bar')) return;
+          const id = el.id || '';
+          if(id === 'cleanTopBar' || id === 'msgs') return;
+          /* Real chat messages carry these data attrs */
+          if(el.dataset && (el.dataset.key || el.dataset.msgKey || el.dataset.convId)) return;
+
+          const cs = getComputedStyle(el);
+          if(cs.position !== 'fixed' && cs.position !== 'absolute') return;
+          if(cs.display === 'none' || cs.visibility === 'hidden') return;
+          if(parseFloat(cs.opacity) < 0.04) return;
+
+          const r = el.getBoundingClientRect();
+          if(r.width < 8 || r.height < 8) return;
+          if(r.width > vw * 0.92) return;       /* full-width bars are fine */
+          if(r.height > 240) return;            /* tall panels handled elsewhere */
+
+          /* Is it inside the danger band? */
+          const inBand = (r.top < bandBottom && r.bottom > bandTop);
+          if(!inBand) return;
+
+          /* Where is its horizontal centre? */
+          const elCenter = r.left + r.width / 2;
+          const nearViewportCenter = Math.abs(elCenter - center) < vw * 0.18;
+
+          /* The legit centred chip sits near centre → leave it.
+             A ghost pill hugging the LEFT edge does NOT → kill it. */
+          if(nearViewportCenter) return;
+
+          /* Only kill things on the left third (that's where the ghost is) */
+          if(r.left > vw * 0.42) return;
+
+          /* KILL */
+          const sig = (id ? '#'+id : '') +
+                      (typeof el.className === 'string' && el.className ? '.'+el.className.trim().split(/\s+/).join('.') : '') +
+                      ' "' + (el.textContent||'').trim().slice(0,24) + '"';
+          if(_killLog.indexOf(sig) < 0){
+            _killLog.push(sig);
+            console.warn('[GhostKiller] removed top-left stray:', sig,
+              {top:Math.round(r.top),left:Math.round(r.left),w:Math.round(r.width),h:Math.round(r.height)});
+          }
+          el.style.setProperty('display','none','important');
+        });
+      }catch(e){ /* never break the app */ }
+    }
+
+    /* Run persistently — every second, plus on interaction + visibility */
+    setInterval(_killTopLeftGhosts, 1000);
+    ['click','touchstart','scroll'].forEach(ev =>
+      window.addEventListener(ev, () => setTimeout(_killTopLeftGhosts, 200), { passive: true }));
+    document.addEventListener('visibilitychange', () => {
+      if(!document.hidden) setTimeout(_killTopLeftGhosts, 200);
+    });
+    /* First runs quickly after load */
+    [300, 800, 1500, 3000].forEach(t => setTimeout(_killTopLeftGhosts, t));
+
+    window._ghostKiller = {
+      run: _killTopLeftGhosts,
+      log: function(){ return _killLog.slice(); }
+    };
+
+    console.log('%cSpurana ✦ Ghost Killer Final — position-based, persistent',
+      'background:linear-gradient(135deg,#DC2626,#F87171);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  #ltBar hidden unless opened · left-band strays killed by position');
+    console.log('  See _ghostKiller.log() for exactly what was removed');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  LISTEN GHOST SURGICAL — the band under the header, finally clean ║
+     ║                                                                ║
+     ║  Root cause found: multiple listen elements stack in the band  ║
+     ║  under the header, all with huge 0 0 80px pink glows that      ║
+     ║  bleed sideways:                                               ║
+     ║   · #ltChip       "BELOVED IS LISTENING"  (top 66px, centred)  ║
+     ║   · #ltTapToHear  "Tap to hear / Partner is listening"         ║
+     ║                   (top 90px, centred) — REDUNDANT with chip    ║
+     ║   · #ltBar        full player (should only show when opened)   ║
+     ║   · #ltAutoFallback "MUSIC WAITING"                            ║
+     ║                                                                ║
+     ║  Fixes:                                                        ║
+     ║   1 · Kill #ltTapToHear entirely (the chip already says        ║
+     ║       "TAP TO HEAR" — no need for a second prompt)            ║
+     ║   2 · Tighten every listen-element glow so no halo bleeds      ║
+     ║   3 · Whitelist-based band cleaner: in the strip just under    ║
+     ║       the header, ONLY #ltChip + structural elements may live; ║
+     ║       everything else floating there is removed                ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function ListenGhostSurgical(){
+    'use strict';
+
+    if(!document.getElementById('listenGhostStyles')){
+      const s = document.createElement('style');
+      s.id = 'listenGhostStyles';
+      s.textContent = `
+/* ── 1 · Kill the redundant Tap-to-Hear prompt for good ──
+        (the chip already carries "· TAP TO HEAR") ── */
+#ltTapToHear{ display: none !important; }
+
+/* ── 2 · Tighten the glows so nothing bleeds sideways ── */
+#ltChip{
+  box-shadow: 0 6px 20px rgba(0,0,0,.45) !important;
+  left: 50% !important;
+  right: auto !important;
+}
+#ltChip:not(.on){ visibility: hidden !important; pointer-events: none !important; }
+#ltBar{
+  box-shadow: 0 8px 28px rgba(0,0,0,.5) !important;
+}
+#ltBar:not(.on){ display: none !important; }
+#ltAutoFallback{
+  box-shadow: 0 6px 20px rgba(0,0,0,.4) !important;
+}
+@media (max-width: 600px){ #ltChip{ left: 50% !important; } }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* Remove #ltTapToHear from the DOM if it exists, and guard against re-add */
+    function _nukeTapToHear(){
+      const el = document.getElementById('ltTapToHear');
+      if(el){ el.classList.remove('on'); el.style.display = 'none'; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       WHITELIST-BASED BAND CLEANER
+       Only these may live in the strip just under the header.
+       ═══════════════════════════════════════════════════════════════ */
+    function _allowedInBand(el){
+      if(!el) return true;
+      const id = el.id || '';
+      /* The ONE legit floating element in the band: the centred chip */
+      if(id === 'ltChip') return true;
+      /* The full player is allowed ONLY when explicitly opened */
+      if(id === 'ltBar' && el.classList.contains('on')) return true;
+      /* Structural containers */
+      if(el.closest('#cleanTopBar')) return true;
+      if(el.closest('.env-strip, .env-now')) return true;
+      if(el.closest('#msgs, .msgs-wrap, .messages, .chat-area')) return true;
+      if(el.closest('.inp-row, .composer, .input-bar')) return true;
+      /* Real chat messages */
+      if(el.dataset && (el.dataset.key || el.dataset.msgKey || el.dataset.convId)) return true;
+      return false;
+    }
+
+    let _cleanLog = [];
+    function _cleanBand(){
+      try{
+        _nukeTapToHear();
+        const header = document.getElementById('cleanTopBar');
+        if(!header) return;
+        const hb = header.getBoundingClientRect().bottom;
+        const bandTop = hb - 6;
+        const bandBottom = hb + 110;   /* the strip directly under the header */
+        const vw = window.innerWidth;
+
+        document.querySelectorAll('body > *, body > * > *').forEach(el => {
+          if(!(el instanceof HTMLElement)) return;
+          if(_allowedInBand(el)) return;
+
+          const cs = getComputedStyle(el);
+          if(cs.position !== 'fixed' && cs.position !== 'absolute') return;
+          if(cs.display === 'none' || cs.visibility === 'hidden') return;
+          if(parseFloat(cs.opacity) < 0.03) return;
+
+          const r = el.getBoundingClientRect();
+          if(r.width < 6 || r.height < 6) return;
+          if(r.height > 260) return;            /* tall modals handled elsewhere */
+          /* Does it intersect the under-header band? */
+          if(r.top >= bandBottom || r.bottom <= bandTop) return;
+          /* Is it actually on-screen horizontally? */
+          if(r.right < 0 || r.left > vw) return;
+
+          /* Not allowed → remove from the band */
+          const sig = (id => id ? '#'+id : '')(el.id) +
+                      (typeof el.className === 'string' && el.className ? '.'+el.className.trim().split(/\s+/).join('.') : '') +
+                      ' "' + (el.textContent||'').trim().slice(0,24) + '"';
+          if(_cleanLog.indexOf(sig) < 0){
+            _cleanLog.push(sig);
+            console.warn('[ListenGhost] cleared from band:', sig,
+              {top:Math.round(r.top),left:Math.round(r.left),w:Math.round(r.width),h:Math.round(r.height)});
+          }
+          el.style.setProperty('display','none','important');
+        });
+      }catch(e){ /* never break the app */ }
+    }
+
+    /* Run persistently + on interaction */
+    setInterval(_cleanBand, 1000);
+    [200, 600, 1200, 2500].forEach(t => setTimeout(_cleanBand, t));
+    ['click','touchstart','scroll'].forEach(ev =>
+      window.addEventListener(ev, () => setTimeout(_cleanBand, 150), { passive: true }));
+    document.addEventListener('visibilitychange', () => {
+      if(!document.hidden) setTimeout(_cleanBand, 150);
+    });
+
+    window._listenGhost = {
+      clean: _cleanBand,
+      log: function(){ return _cleanLog.slice(); }
+    };
+
+    console.log('%cSpurana ✦ Listen Ghost Surgical — band under header sealed',
+      'background:linear-gradient(135deg,#DC2626,#FF6B9D);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  #ltTapToHear removed · glows tightened · only the centred chip survives');
+    console.log('  _listenGhost.log() shows what was cleared');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  KILL OLD MODE STRIP — the hidden menu behind the header       ║
+     ║                                                                ║
+     ║  THE answer the user meant all along: a leftover .mode-strip   ║
+     ║  (💬 Chat · 🌟 Divine AI · 🧠 Quest · 🎴 Soul Cards · 🎬       ║
+     ║  Together · 🤝 Sanctuary) sits at the top of the chat,        ║
+     ║  hidden BEHIND the fixed #cleanTopBar. Its buttons peek out    ║
+     ║  just under the header — tapping one (e.g. Soul Cards) opened  ║
+     ║  a feature "beneath the chat screen."                          ║
+     ║                                                                ║
+     ║  This strip is fully redundant — every mode is reachable from  ║
+     ║  the ⛩ Sanctuary doors. So we remove it entirely and reset    ║
+     ║  to plain chat so no feature banner stays stuck open.          ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function KillOldModeStrip(){
+    'use strict';
+
+    if(!document.getElementById('killModeStripStyles')){
+      const s = document.createElement('style');
+      s.id = 'killModeStripStyles';
+      s.textContent = `
+/* ── Remove the old mode strip entirely (replaced by Sanctuary doors) ── */
+.mode-strip{ display: none !important; }
+
+/* ── Any feature banner that the old strip could open stays closed
+       unless the feature is deliberately launched from the doors.
+       These are inline banners; force them hidden in normal chat. ── */
+#soulCardsBanner, #watchBanner, #questBanner, #sanctuaryBanner{
+  display: none !important;
+}
+/* When a feature is genuinely launched it adds its own .active-launch
+   marker, which re-enables it */
+#soulCardsBanner.active-launch,
+#watchBanner.active-launch,
+#questBanner.active-launch,
+#sanctuaryBanner.active-launch{
+  display: flex !important;
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* Physically remove the mode strip from the DOM (and guard re-add) */
+    function _removeStrip(){
+      document.querySelectorAll('.mode-strip').forEach(el => {
+        if(el.parentElement) el.parentElement.removeChild(el);
+      });
+    }
+
+    /* Reset to plain chat so no feature banner is stuck open from a
+       stray earlier tap on the hidden strip */
+    function _resetToChat(){
+      try{
+        if(typeof window.setMode === 'function' && window.__modeResetDone !== true){
+          window.__modeResetDone = true;
+          window.setMode('chat');
+        }
+      }catch(_){}
+      /* Belt-and-suspenders: force-hide the feature banners */
+      ['soulCardsBanner','watchBanner','questBanner','sanctuaryBanner'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el && !el.classList.contains('active-launch')){
+          el.style.display = 'none';
+        }
+      });
+    }
+
+    /* Wrap setMode so that LAUNCHING a feature (from the doors) still works,
+       but the banner shows via the .active-launch marker we control */
+    function _wrapSetMode(){
+      if(typeof window.setMode !== 'function' || window.setMode.__stripWrapped) return false;
+      const orig = window.setMode;
+      window.setMode = function(mode){
+        const r = orig.apply(this, arguments);
+        try{
+          /* Mark the matching banner as deliberately launched */
+          const map = { cards:'soulCardsBanner', watch:'watchBanner', hunt:'questBanner', private:'sanctuaryBanner' };
+          ['soulCardsBanner','watchBanner','questBanner','sanctuaryBanner'].forEach(id => {
+            const el = document.getElementById(id);
+            if(!el) return;
+            if(map[mode] === id){
+              el.classList.add('active-launch');
+            } else {
+              el.classList.remove('active-launch');
+              el.style.display = 'none';
+            }
+          });
+        }catch(_){}
+        return r;
+      };
+      window.setMode.__stripWrapped = true;
+      return true;
+    }
+
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _removeStrip();
+      _wrapSetMode();
+      if(_tries === 2) _resetToChat();   /* reset once, after things settle */
+      if(_tries > 30) clearInterval(_timer);
+    }, 400);
+
+    /* Guard: if anything tries to re-insert the strip, remove it again */
+    if(document.body){
+      const obs = new MutationObserver(muts => {
+        for(const m of muts){
+          for(const node of m.addedNodes){
+            if(node.nodeType === 1 && node.classList && node.classList.contains('mode-strip')){
+              if(node.parentElement) node.parentElement.removeChild(node);
+            }
+          }
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    }
+
+    window._noStrip = { remove: _removeStrip, resetToChat: _resetToChat };
+
+    console.log('%cSpurana ✦ Old mode-strip removed — hidden menu behind header is GONE',
+      'background:linear-gradient(135deg,#DC2626,#22C55E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  All modes still reachable via the ⛩ Sanctuary doors');
+  })();
+
+
+
+
 
 
 

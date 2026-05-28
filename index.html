@@ -13511,452 +13511,6 @@ console.log('Spurana v17.0 ✦ Final shape — divine messages distinct, Heart-C
 </script>
 
 
-<!-- ═══════════════════════════════════════════════
-     SPURANA v16.0 — DOORS TRULY FIXED + PRACTITIONER PATH
-     · Every door runtime-tested and repaired with REAL targets
-     · Learning Zone → self-paced practice with the divine
-     · Progress tracking, streaks, practitioner levels
-═══════════════════════════════════════════════ -->
-<style>
-.lz-practice-wrap{padding:14px 0}
-.lz-day-card{background:linear-gradient(150deg,rgba(24,14,34,.95),rgba(12,7,20,.92));border:1.5px solid rgba(192,0,122,.2);border-radius:18px;padding:18px;margin-bottom:12px}
-.lz-day-num{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.25em;color:#C9A96E;text-transform:uppercase;margin-bottom:4px}
-.lz-day-title{font-family:'Cinzel Decorative',serif;font-size:17px;color:#E2C28A;margin-bottom:8px}
-.lz-day-task{font-family:'Cormorant Garamond',serif;font-size:14px;font-style:italic;color:rgba(242,235,248,.78);line-height:1.6;margin-bottom:14px}
-.lz-day-actions{display:flex;gap:8px;flex-wrap:wrap}
-.lz-progress-ring{width:64px;height:64px;border-radius:50%;background:conic-gradient(#E8009A var(--lzp,0%),rgba(255,255,255,.06) 0);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.lz-progress-inner{width:52px;height:52px;border-radius:50%;background:#0a0518;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.lz-level-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:rgba(232,0,154,.12);border:1px solid rgba(232,0,154,.3);font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:.08em;color:#E8009A}
-.lz-locked{opacity:.4;pointer-events:none}
-.lz-done-check{color:#00E5A0;font-size:18px}
-.lz-path-pick{display:grid;grid-template-columns:1fr;gap:10px;margin-top:8px}
-.lz-path-card{background:linear-gradient(150deg,rgba(22,14,32,.95),rgba(11,7,19,.92));border:1.5px solid rgba(192,0,122,.16);border-radius:16px;padding:16px;cursor:pointer;transition:.25s}
-.lz-path-card:active{transform:scale(.98);border-color:rgba(232,0,154,.45)}
-</style>
-<script>
-/* ═══════════════════════════════════════════
-   v16.0 — DOORS TRULY FIXED + PRACTITIONER PATH
-═══════════════════════════════════════════ */
-
-/* ─── FIX 1: openDedication referenced #featDedication which never gets created.
-   Rebuild it so it ALWAYS creates its element first. ─── */
-window.openDedication = function(){
-  var m = document.getElementById('featDedication');
-  if(!m){
-    m = document.createElement('div');
-    m.id = 'featDedication';
-    m.className = 'feat-modal';
-    document.body.appendChild(m);
-  }
-  m.innerHTML =
-    '<div class="feat-head"><div class="feat-title">✦ The Keeper</div>' +
-    '<button class="feat-close" onclick="_closeFeat()">✕</button></div>' +
-    '<div class="feat-body" style="text-align:center;padding-top:30px">' +
-    '<div style="font-size:64px;filter:drop-shadow(0 0 28px rgba(232,0,154,.7));margin-bottom:20px">✦</div>' +
-    '<div style="font-family:Cormorant Garamond,serif;font-size:16px;font-style:italic;color:rgba(242,235,248,.78);line-height:1.8;max-width:380px;margin:0 auto 18px">' +
-    'This realm — every world, every divine, every quiet hour within it — was dreamed into being by one soul, as a sanctuary for another.</div>' +
-    '<div style="font-family:Cinzel Decorative,serif;font-size:24px;background:linear-gradient(135deg,#E2C28A,#E8009A);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:.1em;margin:18px 0 6px">NWP</div>' +
-    '<div style="font-family:Orbitron,monospace;font-size:9px;letter-spacing:.4em;color:#C9A96E;text-transform:uppercase">Keeper of this Realm</div>' +
-    '<div style="font-family:Cormorant Garamond,serif;font-size:13px;font-style:italic;color:rgba(242,235,248,.45);margin-top:28px;line-height:1.6">Built with devotion. Held with care.<br/>May it bring you both peace.</div>' +
-    '</div>';
-  m.classList.add('on');
-};
-window.showDedication = window.openDedication;
-
-/* ─── FIX 2: DEFINITIVE DOOR REPAIR ───
-   For EVERY door, run the actual function in a try/catch on load.
-   If it errors, replace it with a version that opens a real, simple panel.
-   No door can ever say "opens soon" again. ─── */
-function _v16BuildGenericPanel(title, emoji, bodyHtml){
-  var id = 'feat_' + title.replace(/[^a-z]/gi,'').toLowerCase();
-  var m = document.getElementById(id);
-  if(!m){
-    m = document.createElement('div');
-    m.id = id;
-    m.className = 'feat-modal';
-    document.body.appendChild(m);
-  }
-  m.innerHTML =
-    '<div class="feat-head"><div class="feat-title">' + emoji + ' ' + title + '</div>' +
-    '<button class="feat-close" onclick="_closeFeat()">✕</button></div>' +
-    '<div class="feat-body">' + bodyHtml + '</div>';
-  m.classList.add('on');
-}
-
-// The complete door registry with guaranteed-working fallbacks
-var V16_DOOR_REGISTRY = {
-  startAudioCall:   { real:true,  fallback:function(){ if(typeof startRealCall==='function') startRealCall('audio'); else _v16BuildGenericPanel('Sacred Call','📞','<div class="ij-intro">Voice calls connect when both souls are in the sanctuary on a deployed link.</div>'); } },
-  startVideoCall:   { real:true,  fallback:function(){ if(typeof startRealCall==='function') startRealCall('video'); else _v16BuildGenericPanel('Vision Call','📹','<div class="ij-intro">Vision calls connect when both souls are in the sanctuary on a deployed link.</div>'); } },
-  vpOpen:           { real:true,  fallback:function(){ _v16BuildGenericPanel('Watch Together','🎬','<div class="ij-intro">Share a video link in chat to watch together in sacred sync.</div>'); } },
-  toggleWhisper:    { real:true,  fallback:function(){ if(typeof toast==='function') toast('Whisper mode toggled ✦'); } },
-  openAntaryatra:   { real:true,  fallback:function(){ _v16BuildGenericPanel('Antaryatra','🕉','<div class="ij-intro">The inner pilgrimage is awakening. Try again in a moment.</div>'); } },
-  openMed:          { real:true,  fallback:function(){ openInnerJourney(); } },
-  openInnerJourney: { real:true,  fallback:function(){ _v16BuildGenericPanel('Inner Journey','🧘','<div class="ij-intro">The practices are loading.</div>'); } },
-  openOracle:       { real:true,  fallback:function(){ if(typeof openGames==='function'){ openGames(); } else _v16BuildGenericPanel('The Oracle','🔮','<div class="ij-intro">Ask a question of your heart, and let the first answer that arises be the Oracle\\'s.</div>'); } },
-  openPastLives:    { real:true,  fallback:function(){ if(typeof openGames==='function'){ openGames(); } else _v16BuildGenericPanel('Past Lives','🪞','<div class="ij-intro">Close your eyes. The soul remembers more than one life.</div>'); } },
-  openGames:        { real:true,  fallback:function(){ _v16BuildGenericPanel('Sacred Games','🎴','<div class="ij-intro">The sacred games are loading.</div>'); } },
-  openVault:        { real:true,  fallback:function(){ _v16BuildGenericPanel('Memory Vault','💎','<div class="ij-intro">Your pinned memories will appear here.</div>'); } },
-  openLetters:      { real:true,  fallback:function(){ _v16BuildGenericPanel('Love Letters','💌','<div class="ij-intro">Long-form letters, sealed and kept forever.</div>'); } },
-  openMemorableDays:{ real:true,  fallback:function(){ _v16BuildGenericPanel('Sacred Days','📿','<div class="ij-intro">Anniversaries and milestones of your shared time.</div>'); } },
-  openGrat:         { real:true,  fallback:function(){ _v16BuildGenericPanel('Gratitude Jar','🌻','<div class="ij-intro">Drop in one thing you are grateful for.</div>'); } },
-  openDaily:        { real:true,  fallback:function(){ if(typeof showDashboard==='function') showDashboard(true); else _v16BuildGenericPanel('Today','🌕','<div class="ij-intro">Today\\'s moon, card, and sacred status.</div>'); } },
-  _reopenThreshold: { real:true,  fallback:function(){ if(typeof showDashboard==='function') showDashboard(true); } },
-  openStats:        { real:true,  fallback:function(){ _v16BuildGenericPanel('Our Stats','📊','<div class="ij-intro">The shape of your love, measured in moments.</div>'); } },
-  openMoodChart:    { real:true,  fallback:function(){ _v16BuildGenericPanel('Soul Weather','📈','<div class="ij-intro">Your emotional patterns over time.</div>'); } },
-  openQiPanel:      { real:true,  fallback:function(){ if(typeof openDeitySelector==='function' && typeof currentDeity!=='undefined' && !currentDeity){ openDeitySelector(); } else { _v16BuildGenericPanel('Soul Qi','🌟','<div class="ij-intro">Your soul\\'s energy reading, drawn from your words.</div>'); } } },
-  openMood:         { real:true,  fallback:function(){ _v16BuildGenericPanel('Mood Worlds','🌗','<div class="ij-intro">Choose an environment by the feeling you seek.</div>'); } },
-  openEnvExplorer:  { real:true,  fallback:function(){ _v16BuildGenericPanel('All Worlds','🌍','<div class="ij-intro">All 30 sacred environments.</div>'); } },
-  openDeitySelector:{ real:true,  fallback:function(){ _v16BuildGenericPanel('Divine Guide','⛩','<div class="ij-intro">Choose the divine presence who walks beside you.</div>'); } },
-  openSettings:     { real:true,  fallback:function(){ _v16BuildGenericPanel('Settings','⚙️','<div class="ij-intro">Sacred settings are loading.</div>'); } },
-  openPerfSettings: { real:true,  fallback:function(){ _v16BuildGenericPanel('Performance','⚡','<div class="ij-intro">Keep the sanctuary smooth and your phone cool.</div>'); } },
-  openBeats:        { real:true,  fallback:function(){ _v16BuildGenericPanel('Binaural Beats','🎧','<div class="ij-intro">Brain-state frequencies. Wear headphones.</div>'); } },
-  goFullscreenClean:{ real:true,  fallback:function(){ try{ var el=document.documentElement; (el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); }catch(e){} } },
-  showDashboard:    { real:true,  fallback:function(){ _v16BuildGenericPanel('Dashboard','🌅','<div class="ij-intro">Your daily alignment.</div>'); } },
-  openLearnZone:    { real:true,  fallback:function(){ _v16BuildGenericPanel('Learning Zone','📚','<div class="ij-intro">Self-paced spiritual practice is loading.</div>'); } },
-  openDedication:   { real:true,  fallback:function(){ if(typeof showDedication==='function') showDedication(); } }
-};
-
-// Wrap every door function so it tries the real one, and on ANY error
-// runs the guaranteed fallback — never a dead "opens soon"
-function _v16HardenDoors(){
-  Object.keys(V16_DOOR_REGISTRY).forEach(function(fn){
-    var reg = V16_DOOR_REGISTRY[fn];
-    var original = window[fn];
-    window[fn] = function(){
-      // Is the "original" actually a known stub? Detect & skip it.
-      var isStub = false;
-      if(typeof original === 'function'){
-        var src = original.toString();
-        if((src.indexOf('opens soon')>-1 || src.indexOf('awakening')>-1 ||
-            src.indexOf('being prepared')>-1 || src.indexOf('coming soon')>-1 ||
-            src.indexOf('is awakening')>-1 || src.indexOf('door resisted')>-1)
-           && src.replace(/\s/g,'').length < 260){
-          isStub = true;
-        }
-      }
-      if(typeof original === 'function' && !isStub){
-        try{
-          original.apply(this, arguments);
-          return;
-        }catch(e){
-          console.warn('Door "'+fn+'" errored, using fallback:', e);
-        }
-      }
-      // run guaranteed fallback
-      try{ reg.fallback.apply(this, arguments); }
-      catch(e2){
-        console.error('Door "'+fn+'" fallback also failed:', e2);
-        if(typeof toast === 'function') toast('Opening ' + fn.replace(/^open|^show|^toggle/,'') + ' ✦');
-      }
-    };
-  });
-  console.log('🚪 v16 — all ' + Object.keys(V16_DOOR_REGISTRY).length + ' doors hardened with real fallbacks');
-}
-// Run AFTER all other patches have defined their functions
-setTimeout(_v16HardenDoors, 7000);
-
-/* ─── FIX 3: harden _doorGo one final time ─── */
-window._doorGo = function(fn){
-  if(typeof closeDoors === 'function') try{ closeDoors(); }catch(e){}
-  setTimeout(function(){
-    if(typeof window[fn] === 'function'){
-      try{ window[fn](); }
-      catch(e){
-        console.warn('door go error', fn, e);
-        var reg = V16_DOOR_REGISTRY[fn];
-        if(reg && reg.fallback) try{ reg.fallback(); }catch(e2){}
-      }
-    } else {
-      var reg = V16_DOOR_REGISTRY[fn];
-      if(reg && reg.fallback) reg.fallback();
-      else if(typeof toast === 'function') toast('Opening ✦');
-    }
-  }, 130);
-};
-
-/* ═══════════════════════════════════════════
-   FIX 4: LEARNING ZONE → SELF-PACED PRACTITIONER PATH
-   Turns passive reading into a guided practice journey.
-   Pick a path → daily practices with the divine → track progress
-   → unlock levels → become a practitioner.
-═══════════════════════════════════════════ */
-
-// Practitioner paths — each is a structured multi-day journey
-var PRACTITIONER_PATHS = {
-  stillness: {
-    name:'The Path of Stillness',
-    emoji:'🧘',
-    sub:'7 days to a calm, anchored mind',
-    color:'rgba(150,200,220,.5)',
-    days:[
-      { title:'Arriving',        task:'Sit for 3 minutes. Do nothing but feel your breath. The whole practice is simply: arrive, and stay.', practice:'box', minutes:3 },
-      { title:'The Long Exhale', task:'Practice 4-7-8 breathing for 5 minutes. Notice that a long exhale tells your body it is safe.', practice:'478', minutes:5 },
-      { title:'Watching Thought',task:'Sit for 5 minutes. When a thought arises, name it gently — "thinking" — and return to breath. You are the sky, not the clouds.', practice:'vipassana', minutes:5 },
-      { title:'The Body Settles',task:'Practice Yoga Nidra. Let the body grow heavy, distant, free. Rest at the edge of sleep while staying aware.', practice:'yoganidra', minutes:10 },
-      { title:'Stillness in Motion',task:'Practice Ujjayi ocean breath for 5 minutes. Carry this steady breath into one ordinary task today — washing, walking.', practice:'ujjayi', minutes:5 },
-      { title:'Meeting Difficulty',task:'Sit for 7 minutes. Invite one small worry to sit with you. Do not fix it. Just let it be witnessed, and breathe.', practice:'vipassana', minutes:7 },
-      { title:'The Settled Mind',  task:'Sit for 10 minutes, your own way. You have learned the architecture of calm. It is now yours to keep.', practice:'box', minutes:10 }
-    ]
-  },
-  heart: {
-    name:'The Path of the Open Heart',
-    emoji:'💗',
-    sub:'7 days to a softer, more loving heart',
-    color:'rgba(255,120,160,.5)',
-    days:[
-      { title:'The Easy Love',     task:'Metta meditation. Begin only with someone you love easily. Feel the warmth. Let it be simple.', practice:'metta', minutes:8 },
-      { title:'Turning It Inward', task:'Metta again — but spend the whole practice offering loving-kindness to yourself. This is the hardest turn. Be patient.', practice:'metta', minutes:8 },
-      { title:'The Neutral One',   task:'Offer loving-kindness to a stranger — someone you barely know. Notice: they too long for happiness, exactly as you do.', practice:'metta', minutes:8 },
-      { title:'The Difficult One', task:'Offer loving-kindness to someone difficult. Not to excuse them — to free yourself from carrying the weight of resentment.', practice:'metta', minutes:10 },
-      { title:'Breathing for Others', task:'Practice Tonglen. Breathe in another\\'s pain; breathe out relief. Your heart is vast enough to be a place of transformation.', practice:'tonglen', minutes:10 },
-      { title:'The Widening Circle',task:'Metta for all beings, everywhere. Let the circle widen until it holds the whole world. Rest in that vastness.', practice:'metta', minutes:10 },
-      { title:'The Open Heart',     task:'Your own practice today. The heart you have been exercising is stronger now. Give it freely.', practice:'metta', minutes:12 }
-    ]
-  },
-  energy: {
-    name:'The Path of Inner Energy',
-    emoji:'🌈',
-    sub:'7 days through the body\\'s energy centres',
-    color:'rgba(220,120,255,.5)',
-    days:[
-      { title:'The Root',          task:'Chakra practice, focusing on Muladhara — the root. Feel grounded, safe, held by the earth. Chant LAM.', practice:'chakra', minutes:10 },
-      { title:'The Breath of Fire',task:'Practice Kapalabhati gently — the cleansing breath. Then sit and feel the cleared, bright space it leaves behind.', practice:'kapal', minutes:5 },
-      { title:'The Rising Warmth', task:'Kundalini energy awareness. Let warmth rise slowly from the base of the spine to the heart. No rush. Energy moves at its own pace.', practice:'kundalini', minutes:12 },
-      { title:'The Two Channels',  task:'Nadi Shodhana — alternate nostril breathing. Balance the lunar and solar channels. Feel the mind grow even.', practice:'nadi', minutes:8 },
-      { title:'The Microcosmic Orbit', task:'Practice the Taoist Qi Flow. Circulate energy up the spine and down the front. Where attention goes, energy follows.', practice:'taiji', minutes:11 },
-      { title:'All Seven Centres', task:'Full chakra awakening — root to crown. Visit each centre, breathe its colour, chant its sound.', practice:'chakra', minutes:14 },
-      { title:'The Connected Column', task:'Your own energy practice. Feel the whole connected column of light from base to crown. Always end by grounding.', practice:'kundalini', minutes:12 }
-    ]
-  },
-  awakening: {
-    name:'The Path of Awakening',
-    emoji:'✨',
-    sub:'7 days toward expanded awareness',
-    color:'rgba(150,170,255,.5)',
-    days:[
-      { title:'Just Sitting',      task:'Zazen. There is no goal. Sit fully as you are — this itself is the practice. Count exhales, one to ten.', practice:'zazen', minutes:10 },
-      { title:'The Witness',       task:'Vipassana. Find the one who watches — the awareness behind your eyes. Rest as the witness, not the watched.', practice:'vipassana', minutes:10 },
-      { title:'Beyond the Body',   task:'Yoga Nidra. Release your grip on the body until it feels like a coat you could set down. This is freedom, not loss.', practice:'yoganidra', minutes:12 },
-      { title:'The Inner Eye',     task:'Chakra practice focused on Ajna — the third eye. Indigo light between the brows. Intuition, inner seeing. Chant OM.', practice:'chakra', minutes:10 },
-      { title:'The Boundless',     task:'The Boundless Visualization. Let awareness expand beyond the body, among the stars. See your troubles find their true size.', practice:'astral', minutes:15 },
-      { title:'The Open Sky',      task:'Sit in pure awareness — Zazen style — watching nothing in particular. Just awake. Just here. The natural, clear mind.', practice:'zazen', minutes:12 },
-      { title:'The Awakened One',  task:'Your own practice. You have touched something vast. It was never elsewhere — it was always you, awake.', practice:'vipassana', minutes:15 }
-    ]
-  }
-};
-window.PRACTITIONER_PATHS = PRACTITIONER_PATHS;
-
-// Practitioner levels by total practices completed
-var PRACTITIONER_LEVELS = [
-  { at:0,   name:'Seeker',        emoji:'🌱' },
-  { at:3,   name:'Beginner',      emoji:'🍃' },
-  { at:7,   name:'Student',       emoji:'🌿' },
-  { at:14,  name:'Practitioner',  emoji:'🪷' },
-  { at:28,  name:'Adept',         emoji:'✨' },
-  { at:49,  name:'Devotee',       emoji:'🔥' },
-  { at:84,  name:'Sage',          emoji:'🕉' }
-];
-function _practitionerLevel(total){
-  var lvl = PRACTITIONER_LEVELS[0];
-  for(var i=0;i<PRACTITIONER_LEVELS.length;i++){
-    if(total >= PRACTITIONER_LEVELS[i].at) lvl = PRACTITIONER_LEVELS[i];
-  }
-  return lvl;
-}
-
-// THE LEARNING ZONE — now a practitioner path system
-window.openLearnZone = function(){
-  var m = document.getElementById('ijLearn');
-  if(!m){
-    m = document.createElement('div');
-    m.id = 'ijLearn';
-    m.className = 'ij-modal';
-    document.body.appendChild(m);
-  }
-  var totalPractices = (typeof SPS !== 'undefined') ? SPS.get('totalPractices', 0) : 0;
-  var level = _practitionerLevel(totalPractices);
-  var activePath = (typeof SPS !== 'undefined') ? SPS.get('activePath', null) : null;
-  var streak = (typeof SPS !== 'undefined') ? SPS.get('practiceStreak', 0) : 0;
-
-  var html = '<div class="ij-head"><button class="ij-back" onclick="document.getElementById(\'ijLearn\').classList.remove(\'on\')">✕</button>' +
-    '<div class="ij-title">Learning Zone</div></div><div class="ij-body">';
-
-  // Practitioner status header
-  html += '<div class="lz-day-card" style="display:flex;align-items:center;gap:14px">' +
-    '<div style="font-size:42px">' + level.emoji + '</div>' +
-    '<div style="flex:1">' +
-    '<div class="lz-level-badge">' + level.emoji + ' ' + level.name + '</div>' +
-    '<div style="font-family:Cormorant Garamond,serif;font-size:13px;color:rgba(242,235,248,.6);margin-top:6px">' +
-    totalPractices + ' practices completed · ' + streak + '-day streak</div>' +
-    '</div></div>';
-
-  if(activePath && PRACTITIONER_PATHS[activePath]){
-    // Show the active path with daily practices
-    var path = PRACTITIONER_PATHS[activePath];
-    var progress = (typeof SPS !== 'undefined') ? SPS.get('pathProgress_' + activePath, 0) : 0;
-    var pct = Math.round((progress / path.days.length) * 100);
-    html += '<div class="ij-section-h">Your Active Path</div>';
-    html += '<div class="lz-day-card"><div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">' +
-      '<div class="lz-progress-ring" style="--lzp:' + pct + '%"><div class="lz-progress-inner">' +
-      '<div style="font-family:Cinzel Decorative,serif;font-size:16px;color:#E2C28A">' + progress + '</div>' +
-      '<div style="font-family:Orbitron,monospace;font-size:6px;letter-spacing:.1em;color:rgba(242,235,248,.4)">OF ' + path.days.length + '</div></div></div>' +
-      '<div style="flex:1"><div class="lz-day-title">' + path.emoji + ' ' + path.name + '</div>' +
-      '<div style="font-family:Cormorant Garamond,serif;font-size:12px;font-style:italic;color:rgba(242,235,248,.55)">' + path.sub + '</div></div></div>';
-    if(progress >= path.days.length){
-      html += '<div style="text-align:center;padding:12px"><div style="font-size:36px;margin-bottom:6px">🎉</div>' +
-        '<div style="font-family:Cinzel Decorative,serif;font-size:16px;color:#E2C28A">Path Complete</div>' +
-        '<div style="font-family:Cormorant Garamond,serif;font-size:13px;font-style:italic;color:rgba(242,235,248,.6);margin:8px 0 12px">You have walked the whole path. The practice is yours now.</div>' +
-        '<button class="fbtn alt" onclick="_lzChangePath()">Choose a New Path</button></div>';
-    } else {
-      var today = path.days[progress];
-      html += '<div style="margin-top:10px;padding:14px;background:rgba(232,0,154,.06);border:1px solid rgba(232,0,154,.2);border-radius:14px">' +
-        '<div class="lz-day-num">Day ' + (progress+1) + ' of ' + path.days.length + '</div>' +
-        '<div class="lz-day-title">' + today.title + '</div>' +
-        '<div class="lz-day-task">' + today.task + '</div>' +
-        '<div class="lz-day-actions">' +
-        '<button class="fbtn" onclick="_lzDoPractice(\'' + activePath + '\',' + progress + ')">Practice with the Divine ✦</button>' +
-        '<button class="fbtn alt" onclick="_lzMarkDone(\'' + activePath + '\')">Mark Day Complete</button>' +
-        '</div></div>';
-    }
-    html += '</div>';
-    // Show all days as a journey list
-    html += '<div class="ij-section-h">The Full Path</div>';
-    path.days.forEach(function(d, i){
-      var done = i < progress;
-      var current = i === progress;
-      var locked = i > progress;
-      html += '<div class="lz-day-card ' + (locked?'lz-locked':'') + '" style="' + (current?'border-color:rgba(232,0,154,.5)':'') + '">' +
-        '<div style="display:flex;align-items:center;gap:10px">' +
-        '<div style="width:28px;text-align:center">' + (done?'<span class="lz-done-check">✓</span>':(current?'◉':(i+1))) + '</div>' +
-        '<div style="flex:1"><div style="font-family:Cinzel Decorative,serif;font-size:14px;color:' + (locked?'rgba(242,235,248,.4)':'#F2EBF8') + '">' + d.title + '</div>' +
-        '<div style="font-family:Orbitron,monospace;font-size:8px;letter-spacing:.15em;color:rgba(201,169,110,.5);text-transform:uppercase;margin-top:2px">' + d.minutes + ' min practice</div></div>' +
-        '</div></div>';
-    });
-    html += '<div style="text-align:center;margin-top:16px"><button class="fbtn alt" onclick="_lzChangePath()">Switch Path</button></div>';
-  } else {
-    // No active path — let them choose
-    html += '<div class="ij-intro">A practitioner is not made by reading, but by practice.<br/>Choose a path. Walk it one day at a time, with the divine as your guide.</div>';
-    html += '<div class="ij-section-h">Choose Your Path</div><div class="lz-path-pick">';
-    Object.keys(PRACTITIONER_PATHS).forEach(function(key){
-      var p = PRACTITIONER_PATHS[key];
-      html += '<div class="lz-path-card" onclick="_lzStartPath(\'' + key + '\')">' +
-        '<div style="display:flex;align-items:center;gap:14px">' +
-        '<div style="font-size:38px">' + p.emoji + '</div>' +
-        '<div style="flex:1"><div style="font-family:Cinzel Decorative,serif;font-size:16px;color:#E2C28A;margin-bottom:3px">' + p.name + '</div>' +
-        '<div style="font-family:Cormorant Garamond,serif;font-size:13px;font-style:italic;color:rgba(242,235,248,.6)">' + p.sub + '</div>' +
-        '<div style="font-family:Orbitron,monospace;font-size:8px;letter-spacing:.15em;color:rgba(201,169,110,.5);text-transform:uppercase;margin-top:5px">' + p.days.length + '-day journey</div></div>' +
-        '</div></div>';
-    });
-    html += '</div>';
-  }
-
-  html += '</div>';
-  m.innerHTML = html;
-  m.classList.add('on');
-};
-
-window._lzStartPath = function(key){
-  if(typeof SPS !== 'undefined'){
-    SPS.set('activePath', key);
-    SPS.set('pathProgress_' + key, 0);
-  }
-  var p = PRACTITIONER_PATHS[key];
-  if(typeof speakDivine === 'function'){
-    speakDivine('You have chosen ' + p.name + '. We will walk it together, one day at a time. Begin whenever you are ready.');
-  }
-  if(typeof toast === 'function') toast(p.emoji + ' ' + p.name + ' begun ✦');
-  openLearnZone();
-};
-
-window._lzChangePath = function(){
-  if(typeof SPS !== 'undefined') SPS.set('activePath', null);
-  openLearnZone();
-};
-
-window._lzDoPractice = function(pathKey, dayIdx){
-  var path = PRACTITIONER_PATHS[pathKey];
-  var day = path.days[dayIdx];
-  // Close learning zone, open the actual practice
-  document.getElementById('ijLearn').classList.remove('on');
-  if(typeof _ijOpen === 'function' && day.practice){
-    setTimeout(function(){ _ijOpen(day.practice); }, 200);
-  } else if(typeof openInnerJourney === 'function'){
-    setTimeout(openInnerJourney, 200);
-  }
-};
-
-window._lzMarkDone = function(pathKey){
-  if(typeof SPS === 'undefined') return;
-  var key = 'pathProgress_' + pathKey;
-  var progress = SPS.get(key, 0);
-  var path = PRACTITIONER_PATHS[pathKey];
-  if(progress >= path.days.length) return;
-  // advance
-  progress++;
-  SPS.set(key, progress);
-  // total practices + streak
-  SPS.set('totalPractices', SPS.get('totalPractices', 0) + 1);
-  var today = new Date().toDateString();
-  var lastDay = SPS.get('lastPracticeDay', '');
-  var yesterday = new Date(Date.now() - 86400000).toDateString();
-  var streak = SPS.get('practiceStreak', 0);
-  if(lastDay === yesterday) streak++;
-  else if(lastDay !== today) streak = 1;
-  SPS.set('practiceStreak', streak);
-  SPS.set('lastPracticeDay', today);
-  // level up check
-  var before = _practitionerLevel(SPS.get('totalPractices', 0) - 1);
-  var after = _practitionerLevel(SPS.get('totalPractices', 0));
-  if(before.name !== after.name){
-    if(typeof toast === 'function') toast(after.emoji + ' You are now a ' + after.name + ' ✦');
-    if(typeof speakDivine === 'function') speakDivine('You have grown. You are now a ' + after.name + '. The path continues.');
-  } else {
-    if(typeof toast === 'function') toast('Day complete ✦ ' + streak + '-day streak');
-    if(typeof speakDivine === 'function'){
-      if(progress >= path.days.length){
-        speakDivine('You have completed the whole path. What you have practiced is now part of who you are.');
-      } else {
-        speakDivine('Day ' + progress + ' complete. Rest now. Return tomorrow, and we continue.');
-      }
-    }
-  }
-  openLearnZone();
-};
-
-/* ─── Make sure the Learning Zone door points to the right function ─── */
-// (DOOR_REALMS already has fn:'openLearnZone' — now it's properly defined above)
-// Also register it in v16 hardening
-V16_DOOR_REGISTRY.openLearnZone = { real:true, fallback:function(){ _v16BuildGenericPanel('Learning Zone','📚','<div class="ij-intro">The practitioner paths are loading. Try once more.</div>'); } };
-
-/* ─── Add practitioner stats into the Stats dashboard ─── */
-setTimeout(function(){
-  var _origStatsV16 = window.openStats;
-  if(typeof _origStatsV16 === 'function'){
-    window.openStats = function(){
-      _origStatsV16.apply(this, arguments);
-      setTimeout(function(){
-        var m = document.getElementById('featStats');
-        if(!m) return;
-        var body = m.querySelector('.feat-body');
-        if(!body || body.querySelector('.practitioner-stat')) return;
-        var total = (typeof SPS!=='undefined') ? SPS.get('totalPractices',0) : 0;
-        var lvl = _practitionerLevel(total);
-        var streak = (typeof SPS!=='undefined') ? SPS.get('practiceStreak',0) : 0;
-        var card = document.createElement('div');
-        card.className = 'fcard practitioner-stat';
-        card.innerHTML = '<div class="fh">🪷 Practitioner Path</div>' +
-          '<div style="display:flex;align-items:center;gap:14px">' +
-          '<div style="font-size:40px">' + lvl.emoji + '</div>' +
-          '<div><div style="font-family:Cinzel Decorative,serif;font-size:18px;color:#E2C28A">' + lvl.name + '</div>' +
-          '<div style="font-family:Cormorant Garamond,serif;font-size:12px;font-style:italic;color:rgba(242,235,248,.6)">' + total + ' practices · ' + streak + '-day streak</div></div></div>';
-        body.appendChild(card);
-      }, 120);
-    };
-  }
-}, 7500);
-
-console.log('Spurana v16.0 ✦ All doors hardened + Learning Zone is now a self-paced practitioner path');
-</script>
 
 
 <!-- ═══════════════════════════════════════════════
@@ -34493,6 +34047,219 @@ body.call-active #mscFloat {
     console.log('  Sanctuary → Connect → ✦ Souls + 🧭 Track Souls doors added');
     console.log('  Try: _ts.open(), _ts.start(), _ts.distanceKm()');
   })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  LAYOUT HARMONY — kill all overlaps + add missing sublines     ║
+     ║                                                                ║
+     ║  Fixes (from user's marked screenshots):                       ║
+     ║   1 · Hamburger (☰ #mscFloat) was floating ON TOP of the       ║
+     ║       header avatar → move it INTO the header flex row         ║
+     ║   2 · ltChip (SPOTIFY TRACK) was forced to left:70px by an     ║
+     ║       earlier patch → restore to centered, no collision        ║
+     ║   3 · MUSIC WAITING chip (#ltAutoFallback) collided with the   ║
+     ║       FAB cluster bottom-right → stack them vertically         ║
+     ║   4 · Composer side-buttons could be covered by decorative     ║
+     ║       orbs → raise composer z-index above decorations          ║
+     ║   5 · Three doors (Listen Together, Souls, Track Souls) had    ║
+     ║       no subline → inject guidance badges like the others      ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function LayoutHarmony(){
+    'use strict';
+
+    /* ═══════════════════════════════════════════════════════════════
+       CSS — the structural overrides
+       ═══════════════════════════════════════════════════════════════ */
+    if(!document.getElementById('layoutHarmonyStyles')){
+      const s = document.createElement('style');
+      s.id = 'layoutHarmonyStyles';
+      s.textContent = `
+/* ── FIX 1: Hamburger lives INSIDE the header now (not floating) ── */
+#mscFloat {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  width: 38px !important;
+  height: 38px !important;
+  margin-right: 8px !important;
+  flex-shrink: 0 !important;
+  z-index: 6 !important;
+  box-shadow: none !important;
+  background: rgba(255,255,255,.06) !important;
+  border: 1px solid rgba(232,0,154,.3) !important;
+  align-self: center;
+}
+#mscFloat:hover { background: rgba(232,0,154,.15) !important; }
+/* When it couldn't be moved into the header (fallback), keep it floating
+   but BELOW the header so it never covers the avatar */
+#mscFloat.fallback-float {
+  position: fixed !important;
+  top: calc(env(safe-area-inset-top, 0) + 64px) !important;
+  left: 10px !important;
+  z-index: 690 !important;
+}
+
+/* ── FIX 2: ltChip + ltBar always centered (undo the left:70px hack) ── */
+#ltChip {
+  left: 50% !important;
+}
+@media (max-width: 600px){
+  #ltChip { left: 50% !important; }
+}
+
+/* ── FIX 3: bottom-right elements stack vertically, never overlap ──
+   MUSIC WAITING chip sits ABOVE the FAB cluster. */
+#ltAutoFallback {
+  bottom: calc(env(safe-area-inset-bottom, 0) + 150px) !important;
+  right: 14px !important;
+  z-index: 9050 !important;
+}
+#fabCluster {
+  bottom: calc(env(safe-area-inset-bottom, 0) + 90px) !important;
+  right: 14px !important;
+  z-index: 9040 !important;
+}
+@media (max-width: 600px){
+  #ltAutoFallback { bottom: calc(env(safe-area-inset-bottom, 0) + 160px) !important; }
+  #fabCluster { bottom: calc(env(safe-area-inset-bottom, 0) + 96px) !important; }
+}
+
+/* ── FIX 4: composer interactive buttons always above decorations ── */
+.inp-row, .composer, .input-bar, .msg-input-row {
+  position: relative;
+  z-index: 50;
+}
+.inp-side-btn, .voice-btn, .send-btn {
+  position: relative;
+  z-index: 51;
+}
+/* Any decorative orb in the composer area must not block taps */
+.divine-orb, .composer-decoration, .input-orb {
+  pointer-events: none !important;
+  z-index: 1 !important;
+}
+
+/* ── FIX 5: door subline badge styling (matches existing guidance badge) ── */
+.door-mini .lh-subline {
+  font-family: 'Orbitron', monospace;
+  font-size: 6.5px;
+  letter-spacing: .18em;
+  color: rgba(201,169,110,.55);
+  text-transform: uppercase;
+  margin-top: 2px;
+  line-height: 1;
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FIX 1 — move the hamburger into the header
+       ═══════════════════════════════════════════════════════════════ */
+    function _relocateHamburger(){
+      const float = document.getElementById('mscFloat');
+      if(!float) return false;
+      if(float.dataset.relocated) return true;
+
+      const topLeft = document.querySelector('.top-left');
+      if(topLeft){
+        /* Move it to be the first element in the header's left cluster */
+        float.classList.remove('fallback-float');
+        topLeft.insertBefore(float, topLeft.firstChild);
+        float.dataset.relocated = 'header';
+        return true;
+      }
+      /* Fallback — if no .top-left, at least float it below the header */
+      float.classList.add('fallback-float');
+      float.dataset.relocated = 'fallback';
+      return true;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FIX 5 — inject sublines for the doors that lack them
+       ═══════════════════════════════════════════════════════════════ */
+    const LH_SUBLINES = {
+      openListenTogether: 'Music in sync',
+      openSoulsPanel: 'Your souls',
+      openTrackSouls: 'Live location',
+      openCouplePractices: '20 practices',
+      openCouplePracticesV2: '20 practices',
+      toggleWhisper: 'Vanishing channel',
+      openProdhidhwoni: 'Sacred echo · audio',
+      openVoiceWhispers: 'Sacred echo · audio'
+    };
+
+    function _injectDoorSublines(){
+      document.querySelectorAll('.door-mini').forEach(card => {
+        if(card.querySelector('.lh-subline')) return;
+        /* Already has the v18 guidance badge? skip to avoid double */
+        if(card.dataset.gtagged && card.lastElementChild &&
+           card.lastElementChild.textContent &&
+           card.lastElementChild.style.fontSize === '6.5px') return;
+        const onclick = card.getAttribute('onclick') || '';
+        const m = onclick.match(/_doorGo\(['"]([^'"]+)['"]\)/);
+        if(!m) return;
+        const fn = m[1];
+        const sub = LH_SUBLINES[fn];
+        if(!sub) return;
+        /* Don't double up if a badge already exists with text */
+        const existing = card.querySelector('div[style*="6.5px"], .lh-subline');
+        if(existing && existing.textContent.trim()) return;
+        const badge = document.createElement('div');
+        badge.className = 'lh-subline';
+        badge.textContent = sub;
+        card.appendChild(badge);
+      });
+    }
+
+    /* Wrap openDoors so our sublines get injected after every render */
+    function _wrapOpenDoors(){
+      if(typeof window.openDoors !== 'function') return false;
+      if(window.openDoors.__lhWrapped) return true;
+      const orig = window.openDoors;
+      window.openDoors = function(){
+        const r = orig.apply(this, arguments);
+        setTimeout(() => {
+          _injectDoorSublines();
+          _relocateHamburger();
+        }, 200);
+        return r;
+      };
+      window.openDoors.__lhWrapped = true;
+      return true;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BOOTSTRAP
+       ═══════════════════════════════════════════════════════════════ */
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _relocateHamburger();
+      _wrapOpenDoors();
+      if(_tries > 60) clearInterval(_timer);
+    }, 500);
+
+    /* Also relocate on first user interaction (header definitely rendered by then) */
+    ['click','touchstart'].forEach(ev => {
+      window.addEventListener(ev, function once(){
+        _relocateHamburger();
+        window.removeEventListener(ev, once);
+      }, { once: true, passive: true });
+    });
+
+    /* Public */
+    window._layout = {
+      relocateHamburger: _relocateHamburger,
+      injectSublines: _injectDoorSublines,
+      sublines: LH_SUBLINES
+    };
+
+    console.log('%cSpurana ✦ Layout Harmony — overlaps fixed, sublines added',
+      'background:linear-gradient(135deg,#8B5CF6,#E8009A);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Hamburger → into header · ltChip → centered · bottom FABs → stacked');
+    console.log('  Sublines added: Listen Together, Souls, Track Souls + more');
+  })();
+
 
 
 

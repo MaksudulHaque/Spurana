@@ -383,6 +383,16 @@
         "lastByName": {
           ".validate": "newData.isString() && newData.val().length <= 80"
         }
+      },
+      "watchChat": {
+        ".indexOn": [
+          "ts"
+        ]
+      },
+      "watchReact": {
+        ".indexOn": [
+          "ts"
+        ]
       }
     },
     "rtc": {

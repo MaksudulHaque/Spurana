@@ -36419,6 +36419,394 @@ html.low-battery::before{ content: none !important; display: none !important; }
     console.log('  Rings · connect/end chimes · network warble · offline "away" · voice+vision filters');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  CONNECT UPGRADE — Watch Together (video + chat together) &     ║
+     ║  Listen Together (a proper now-playing music window)           ║
+     ║                                                                ║
+     ║  WATCH:  the video and a live chat now share one screen —      ║
+     ║   side-by-side on wide screens, stacked on phones. Real-time   ║
+     ║   chat via Firebase, floating emoji reactions, sync badge.     ║
+     ║                                                                ║
+     ║  LISTEN: the bar becomes a serene now-playing window with a    ║
+     ║   pulsing visualiser + sync status; opens from the ♪ header    ║
+     ║   icon and the Sanctuary door.                                 ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function ConnectUpgrade(){
+    'use strict';
+
+    /* ───────────────────────────────────────────────────────────────
+       STYLES
+       ─────────────────────────────────────────────────────────────── */
+    if(!document.getElementById('connectUpgradeStyles')){
+      const s = document.createElement('style');
+      s.id = 'connectUpgradeStyles';
+      s.textContent = `
+/* ══ WATCH TOGETHER — split layout ══ */
+#vpModal.cinema > div{ max-width: 1180px !important; }
+#vpModal.cinema .vp-split{
+  display:flex; gap:16px; align-items:stretch; width:100%;
+}
+#vpModal.cinema .vp-video-col{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }
+#vpModal.cinema .vp-chat-col{
+  flex:0 0 320px; width:320px; display:flex; flex-direction:column;
+  background:rgba(15,8,22,.6); border:1px solid rgba(192,0,122,.2);
+  border-radius:16px; overflow:hidden; max-height:62vh;
+}
+.vp-chat-head{
+  padding:12px 14px; border-bottom:1px solid rgba(192,0,122,.15);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.vp-chat-head-title{ font-family:'Cinzel Decorative',serif; font-size:13px; color:#E2C28A; }
+.vp-sync-badge{
+  font-family:'Orbitron',monospace; font-size:8px; letter-spacing:.15em;
+  color:#34D399; display:flex; align-items:center; gap:5px; text-transform:uppercase;
+}
+.vp-sync-badge::before{ content:''; width:6px;height:6px;border-radius:50%;background:#34D399;box-shadow:0 0 6px #34D399; animation:vpSyncPulse 2s infinite; }
+@keyframes vpSyncPulse{ 0%,100%{opacity:.5} 50%{opacity:1} }
+.vp-chat-msgs{ flex:1 1 auto; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+.vp-cmsg{ max-width:85%; padding:8px 12px; border-radius:14px; font-family:'Space Grotesk',sans-serif; font-size:13px; line-height:1.4; word-wrap:break-word; }
+.vp-cmsg.them{ align-self:flex-start; background:rgba(255,255,255,.07); color:#F2EBF8; border-bottom-left-radius:4px; }
+.vp-cmsg.me{ align-self:flex-end; background:linear-gradient(135deg,rgba(232,0,154,.3),rgba(192,0,122,.2)); color:#fff; border-bottom-right-radius:4px; }
+.vp-cmsg-name{ font-family:'Orbitron',monospace; font-size:8px; letter-spacing:.1em; opacity:.5; text-transform:uppercase; margin-bottom:2px; }
+.vp-chat-input-row{ display:flex; gap:8px; padding:10px; border-top:1px solid rgba(192,0,122,.15); }
+.vp-chat-input{ flex:1; background:rgba(255,255,255,.05); border:1px solid rgba(192,0,122,.2); border-radius:999px; padding:9px 14px; color:#F2EBF8; font-family:'Space Grotesk',sans-serif; font-size:13px; outline:none; }
+.vp-chat-input:focus{ border-color:rgba(232,0,154,.5); }
+.vp-chat-send{ width:38px;height:38px;border-radius:50%;border:none; background:linear-gradient(135deg,#E8009A,#C0007A); color:#fff; font-size:15px; cursor:pointer; flex-shrink:0; }
+.vp-react-row{ display:flex; gap:6px; padding:0 10px 8px; flex-wrap:wrap; }
+.vp-react{ width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.04); font-size:16px; cursor:pointer; transition:.15s; }
+.vp-react:active{ transform:scale(.85); }
+/* floating reactions over the video */
+.vp-float-react{ position:absolute; bottom:10%; font-size:40px; pointer-events:none; z-index:30; animation:vpFloatUp 2.6s ease-out forwards; }
+@keyframes vpFloatUp{ 0%{transform:translateY(0) scale(.6);opacity:0} 15%{opacity:1;transform:translateY(-20px) scale(1.1)} 100%{transform:translateY(-220px) scale(.9);opacity:0} }
+/* stacked on phones / portrait */
+@media (max-width: 880px), (orientation: portrait){
+  #vpModal.cinema .vp-split{ flex-direction:column; }
+  #vpModal.cinema .vp-chat-col{ flex:1 1 auto; width:100%; max-height:34vh; }
+}
+
+/* ══ LISTEN TOGETHER — now-playing window polish ══ */
+#ltBar.expanded .lt-bar-body{ max-height: 600px !important; }
+.lt-nowplaying{
+  display:flex; align-items:center; gap:14px; padding:14px;
+  background:linear-gradient(135deg, rgba(232,0,154,.12), rgba(120,40,200,.08));
+  border-radius:14px; margin-bottom:12px;
+}
+.lt-np-art{
+  width:64px;height:64px;border-radius:12px;flex-shrink:0;
+  background:radial-gradient(circle at 40% 35%, rgba(255,150,210,.9), rgba(232,0,154,.5) 50%, rgba(60,20,90,.4));
+  display:flex;align-items:center;justify-content:center;font-size:28px;
+  box-shadow:0 0 24px rgba(232,0,154,.4); animation:ltArtSpin 8s linear infinite paused;
+}
+#ltBar.playing .lt-np-art{ animation-play-state:running; }
+@keyframes ltArtSpin{ from{transform:rotate(0)} to{transform:rotate(360deg)} }
+.lt-np-info{ flex:1; min-width:0; }
+.lt-np-title{ font-family:'Cinzel Decorative',serif; font-size:14px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.lt-np-sub{ font-family:'Cormorant Garamond',serif; font-style:italic; font-size:13px; color:rgba(255,200,225,.65); margin-top:2px; }
+.lt-viz{ display:flex; align-items:flex-end; gap:3px; height:20px; margin-top:8px; }
+.lt-viz span{ width:3px; background:linear-gradient(180deg,#FF6B9D,#E8009A); border-radius:2px; height:30%; }
+#ltBar.playing .lt-viz span{ animation:ltViz .9s ease-in-out infinite; }
+.lt-viz span:nth-child(2){ animation-delay:.1s } .lt-viz span:nth-child(3){ animation-delay:.2s }
+.lt-viz span:nth-child(4){ animation-delay:.3s } .lt-viz span:nth-child(5){ animation-delay:.15s }
+.lt-viz span:nth-child(6){ animation-delay:.25s } .lt-viz span:nth-child(7){ animation-delay:.05s }
+@keyframes ltViz{ 0%,100%{height:25%} 50%{height:95%} }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       WATCH TOGETHER — inject split chat + reactions
+       ─────────────────────────────────────────────────────────────── */
+    const WATCH_CHAT_REF = 'shared/watchChat';
+    const WATCH_REACT_REF = 'shared/watchReact';
+    let _watchChatBound = false;
+
+    function _me(){ return (typeof me!=='undefined'&&me)?me:{uid:'me',name:'You'}; }
+
+    function _buildSplit(){
+      const modal = document.getElementById('vpModal');
+      if(!modal || modal.dataset.split) return;
+      const inner = modal.querySelector(':scope > div');
+      if(!inner) return;
+      modal.dataset.split = '1';
+
+      /* The header is the first child; the rest (video, input, quicks) we
+         wrap into a video column, then add a chat column beside it. */
+      const header = inner.children[0];
+      const rest = Array.from(inner.children).slice(1);
+
+      const split = document.createElement('div');
+      split.className = 'vp-split';
+      const videoCol = document.createElement('div');
+      videoCol.className = 'vp-video-col';
+      rest.forEach(el => videoCol.appendChild(el));
+
+      const chatCol = document.createElement('div');
+      chatCol.className = 'vp-chat-col';
+      chatCol.innerHTML = `
+        <div class="vp-chat-head">
+          <span class="vp-chat-head-title">✦ Together</span>
+          <span class="vp-sync-badge">In sync</span>
+        </div>
+        <div class="vp-chat-msgs" id="vpChatMsgs"></div>
+        <div class="vp-react-row" id="vpReactRow"></div>
+        <div class="vp-chat-input-row">
+          <input class="vp-chat-input" id="vpChatInput" type="text" placeholder="Whisper while you watch…" />
+          <button class="vp-chat-send" id="vpChatSend">➤</button>
+        </div>`;
+
+      split.appendChild(videoCol);
+      split.appendChild(chatCol);
+      inner.appendChild(split);
+      modal.classList.add('cinema');
+
+      /* reactions */
+      const reactRow = chatCol.querySelector('#vpReactRow');
+      ['❤️','😂','😮','😍','🔥','✨','🥹','👏'].forEach(em => {
+        const b = document.createElement('button');
+        b.className = 'vp-react'; b.textContent = em;
+        b.addEventListener('click', () => _sendReaction(em));
+        reactRow.appendChild(b);
+      });
+
+      /* send chat */
+      const input = chatCol.querySelector('#vpChatInput');
+      const send = chatCol.querySelector('#vpChatSend');
+      const doSend = () => {
+        const txt = (input.value||'').trim();
+        if(!txt) return;
+        _sendWatchChat(txt);
+        input.value = '';
+      };
+      send.addEventListener('click', doSend);
+      input.addEventListener('keydown', e => { if(e.key==='Enter') doSend(); });
+
+      _bindWatchChat();
+    }
+
+    function _sendWatchChat(text){
+      const m = _me();
+      if(typeof db !== 'undefined' && db){
+        db.ref(WATCH_CHAT_REF).push({ uid:m.uid, name:m.name||'You', text:text, ts:Date.now() });
+      } else {
+        _renderWatchMsg({ uid:m.uid, name:m.name, text:text }, true); /* offline echo */
+      }
+    }
+
+    function _sendReaction(emoji){
+      const m = _me();
+      _floatReaction(emoji);
+      if(typeof db !== 'undefined' && db){
+        db.ref(WATCH_REACT_REF).push({ uid:m.uid, emoji:emoji, ts:Date.now() });
+      }
+    }
+
+    function _floatReaction(emoji){
+      const videoCol = document.querySelector('#vpModal .vp-video-col');
+      if(!videoCol) return;
+      const span = document.createElement('div');
+      span.className = 'vp-float-react';
+      span.textContent = emoji;
+      span.style.left = (20 + Math.random()*60) + '%';
+      videoCol.style.position = 'relative';
+      videoCol.appendChild(span);
+      setTimeout(() => span.remove(), 2700);
+    }
+
+    function _renderWatchMsg(msg, mine){
+      const list = document.getElementById('vpChatMsgs');
+      if(!list) return;
+      const div = document.createElement('div');
+      div.className = 'vp-cmsg ' + (mine ? 'me' : 'them');
+      div.innerHTML = `<div class="vp-cmsg-name">${mine?'You':(msg.name||'Beloved')}</div>${_esc(msg.text)}`;
+      list.appendChild(div);
+      list.scrollTop = list.scrollHeight;
+      /* keep last 60 */
+      while(list.children.length > 60) list.removeChild(list.firstChild);
+    }
+    function _esc(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+    function _bindWatchChat(){
+      if(_watchChatBound || typeof db === 'undefined' || !db) return;
+      _watchChatBound = true;
+      const myUid = _me().uid;
+      const startAt = Date.now() - 6*3600*1000; /* last 6h of watch chatter */
+      db.ref(WATCH_CHAT_REF).orderByChild('ts').startAt(startAt).limitToLast(60).on('child_added', snap => {
+        const v = snap.val(); if(!v) return;
+        _renderWatchMsg(v, v.uid === myUid);
+      });
+      db.ref(WATCH_REACT_REF).orderByChild('ts').startAt(Date.now()).on('child_added', snap => {
+        const v = snap.val(); if(!v) return;
+        if(v.uid !== myUid) _floatReaction(v.emoji);
+      });
+    }
+
+    /* Hook vpOpen so the split is built every time the theatre opens */
+    function _hookWatch(){
+      if(typeof window.vpOpen === 'function' && !window.vpOpen.__split){
+        const orig = window.vpOpen;
+        window.vpOpen = function(){
+          const r = orig.apply(this, arguments);
+          setTimeout(_buildSplit, 30);
+          return r;
+        };
+        window.vpOpen.__split = true;
+      }
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       LISTEN TOGETHER — now-playing visuals
+       ─────────────────────────────────────────────────────────────── */
+    function _enhanceListen(){
+      const host = document.getElementById('ltPlayerHost');
+      const body = document.querySelector('#ltBar .lt-bar-body');
+      if(!body || document.getElementById('ltNowPlaying')) return;
+      const np = document.createElement('div');
+      np.className = 'lt-nowplaying';
+      np.id = 'ltNowPlaying';
+      np.innerHTML = `
+        <div class="lt-np-art">🎵</div>
+        <div class="lt-np-info">
+          <div class="lt-np-title" id="ltNpTitle">Nothing playing yet</div>
+          <div class="lt-np-sub" id="ltNpSub">Paste a Spotify or YouTube link to begin</div>
+          <div class="lt-viz"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>`;
+      body.insertBefore(np, body.firstChild);
+    }
+
+    /* reflect playing state + title onto the now-playing card */
+    function _syncNowPlaying(){
+      const bar = document.getElementById('ltBar');
+      if(!bar) return;
+      _enhanceListen();
+      const titleEl = document.getElementById('ltTitle');
+      const statusEl = document.getElementById('ltStatusText');
+      const npTitle = document.getElementById('ltNpTitle');
+      const npSub = document.getElementById('ltNpSub');
+      if(npTitle && titleEl && titleEl.textContent && titleEl.textContent !== 'Listen Together'){
+        npTitle.textContent = titleEl.textContent;
+      }
+      if(npSub && statusEl) npSub.textContent = statusEl.textContent;
+      /* playing if a player host has content */
+      const host = document.getElementById('ltPlayerHost');
+      const playing = host && host.children.length > 0;
+      bar.classList.toggle('playing', !!playing);
+    }
+    setInterval(_syncNowPlaying, 1500);
+
+    /* ───────────────────────────────────────────────────────────────
+       Bootstrap
+       ─────────────────────────────────────────────────────────────── */
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _hookWatch();
+      _enhanceListen();
+      if(_tries > 50) clearInterval(_timer);
+    }, 350);
+
+    window._connect = {
+      buildSplit: _buildSplit,
+      sendWatchChat: _sendWatchChat,
+      enhanceListen: _enhanceListen
+    };
+
+    console.log('%cSpurana ✦ Connect Upgrade — Watch (video+chat) · Listen (now-playing)',
+      'background:linear-gradient(135deg,#E8009A,#7C3AED);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Watch Together: live chat beside the video + floating reactions');
+    console.log('  Listen Together: now-playing window with visualiser, opens from ♪ + Sanctuary');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  CHAT LAYOUT FIX — dock the realm strip, clear the corners     ║
+     ║                                                                ║
+     ║  1 · The realm strip (Cosmos · Mystic · River…) becomes a      ║
+     ║      FIXED bar docked directly under the header — in the       ║
+     ║      empty space, not floating in the message stream. Messages ║
+     ║      scroll cleanly beneath it (WhatsApp/Telegram pattern).    ║
+     ║      No more collision with bubbles / date dividers.           ║
+     ║                                                                ║
+     ║  2 · The legacy floating buttons cluttering the bottom corners ║
+     ║      (#doorsFab, .mood-fab, .sound-fab, #ambLabel,             ║
+     ║      #divineWidget) are cleared — every one of their functions ║
+     ║      already lives in the ⛩ Sanctuary / header / realm strip.  ║
+     ║      The composer is left clean: attach · emoji · field ·      ║
+     ║      voice · send.                                             ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function ChatLayoutFix(){
+    'use strict';
+
+    if(!document.getElementById('chatLayoutFixStyles')){
+      const s = document.createElement('style');
+      s.id = 'chatLayoutFixStyles';
+      s.textContent = `
+/* ── 1 · Realm strip docked as a fixed bar under the header ── */
+.env-strip-wrap{
+  position: fixed !important;
+  top: calc(env(safe-area-inset-top,0) + 50px) !important;
+  left: 0 !important; right: 0 !important;
+  z-index: 460 !important;               /* under header(500), over messages */
+  margin: 0 !important;
+  background: #0a0610 !important;
+  box-shadow: 0 6px 18px rgba(7,3,15,.6) !important;
+  border-bottom: 1px solid rgba(192,0,122,.18) !important;
+}
+.env-strip{
+  margin-top: 0 !important;
+  background: #0a0610 !important;
+  border-bottom: none !important;
+  min-height: 34px !important;
+}
+.env-strip-wrap::after{ background: linear-gradient(90deg,transparent,#0a0610) !important; }
+
+/* messages clear the header (50) + realm strip (~38) with a small gap */
+#msgs, .msgs-wrap, .messages, .chat-area{
+  padding-top: calc(env(safe-area-inset-top,0) + 96px) !important;
+}
+@media (max-width: 600px){
+  .env-strip-wrap{ top: calc(env(safe-area-inset-top,0) + 48px) !important; }
+  #msgs, .msgs-wrap, .messages, .chat-area{
+    padding-top: calc(env(safe-area-inset-top,0) + 92px) !important;
+  }
+}
+
+/* ── 2 · Clear the overlapping corner buttons (functions live in ⛩) ── */
+#doorsFab, .mood-fab, .sound-fab, #ambLabel, #divineWidget{
+  display: none !important;
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* Keep the legacy FABs from re-appearing over the composer */
+    function _clearFabs(){
+      ['doorsFab','divineWidget','ambLabel'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el){ el.style.display = 'none'; el.classList.remove('visible'); }
+      });
+      document.querySelectorAll('.mood-fab, .sound-fab').forEach(el => { el.style.display = 'none'; });
+    }
+
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _clearFabs();
+      if(_tries > 40) clearInterval(_timer);
+    }, 500);
+
+    if(document.body){
+      const obs = new MutationObserver(() => _clearFabs());
+      obs.observe(document.body, { childList: true, subtree: true });
+    }
+
+    window._chatLayout = { clearFabs: _clearFabs };
+
+    console.log('%cSpurana ✦ Chat Layout Fix — realm strip docked, corners cleared',
+      'background:linear-gradient(135deg,#10B981,#3ECF8E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Realm strip fixed under header · messages scroll beneath · composer corners clean');
+  })();
+
+
+
 
 
 

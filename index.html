@@ -35854,6 +35854,573 @@ body.call-active #mscFloat {
     console.log('  Backend unchanged (Firebase signalling + STUN/TURN) — works on the live HTTPS app');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  UI POLISH v2 — collisions, duplicates, battery elegance      ║
+     ║   1 · Remove the duplicate ⛩ (#doorsFab) — header has one      ║
+     ║   2 · env-strip becomes a solid opaque bar; messages start     ║
+     ║       cleanly below it (no more name/date collision)           ║
+     ║   3 · Low-battery banner → a quiet elegant crescent pill that  ║
+     ║       fades, instead of a harsh full-width overlay             ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function UIPolishV2(){
+    'use strict';
+
+    if(!document.getElementById('uiPolishV2Styles')){
+      const s = document.createElement('style');
+      s.id = 'uiPolishV2Styles';
+      s.textContent = `
+/* ── 1 · Kill the duplicate floating doors button (header ⛩ remains) ── */
+#doorsFab{ display: none !important; }
+
+/* ── 2 · env-strip: solid, opaque, sits cleanly under the header;
+        messages can never collide with it ── */
+.env-strip-wrap{
+  position: relative !important;
+  z-index: 120 !important;
+  background: #0a0610 !important;
+  box-shadow: 0 6px 18px rgba(7,3,15,.55) !important;
+}
+.env-strip{
+  background: #0a0610 !important;
+  border-bottom: 1px solid rgba(192,0,122,.18) !important;
+}
+/* Give the message stream room so the first date/message starts below
+   the header (52) + env-strip (34) with a comfortable gap */
+.msgs-wrap, #msgs, .messages, .chat-area{
+  padding-top: calc(env(safe-area-inset-top,0) + 96px) !important;
+}
+@media (max-width: 600px){
+  .msgs-wrap, #msgs, .messages, .chat-area{
+    padding-top: calc(env(safe-area-inset-top,0) + 90px) !important;
+  }
+}
+/* First date divider shouldn't hug the strip */
+.msgs-wrap .date-divider:first-child,
+#msgs .day-sep:first-child,
+#msgs .date-divider:first-child{
+  margin-top: 6px !important;
+}
+
+/* ── 3 · Elegant low-battery indicator (replaces the harsh banner) ── */
+html.low-battery::before{ content: none !important; display: none !important; }
+#ccBatteryPill{
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom,0) + 96px);
+  left: 50%; transform: translateX(-50%) translateY(20px);
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px; border-radius: 999px;
+  background: rgba(20,12,8,.7); backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(251,191,36,.3);
+  color: rgba(253,224,140,.9);
+  font-family: 'Cormorant Garamond', serif; font-style: italic;
+  font-size: 13px; letter-spacing: .02em;
+  z-index: 9300; opacity: 0; pointer-events: none;
+  transition: opacity .5s, transform .5s;
+}
+#ccBatteryPill.show{ opacity: 1; transform: translateX(-50%) translateY(0); }
+#ccBatteryPill .cc-moon{ font-size: 14px; filter: drop-shadow(0 0 6px rgba(251,191,36,.5)); }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* Remove the duplicate doors fab from the DOM */
+    function _removeDoorsFab(){
+      const f = document.getElementById('doorsFab');
+      if(f && f.parentElement) f.parentElement.removeChild(f);
+    }
+
+    /* Elegant battery indicator: a quiet pill that appears for 4s when
+       low-battery state toggles on, then fades. No permanent banner. */
+    function _ensureBatteryPill(){
+      if(document.getElementById('ccBatteryPill')) return;
+      const p = document.createElement('div');
+      p.id = 'ccBatteryPill';
+      p.innerHTML = '<span class="cc-moon">◗</span><span>Resting in low light — effects gently dimmed</span>';
+      document.body.appendChild(p);
+    }
+    let _wasLow = false, _pillTimer = null;
+    function _watchBattery(){
+      const isLow = document.documentElement.classList.contains('low-battery');
+      if(isLow && !_wasLow){
+        _ensureBatteryPill();
+        const pill = document.getElementById('ccBatteryPill');
+        if(pill){
+          pill.classList.add('show');
+          if(_pillTimer) clearTimeout(_pillTimer);
+          _pillTimer = setTimeout(() => pill.classList.remove('show'), 4500);
+        }
+      }
+      _wasLow = isLow;
+    }
+
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _removeDoorsFab();
+      _watchBattery();
+      if(_tries > 60) clearInterval(_timer);
+    }, 500);
+    setInterval(_watchBattery, 3000);
+
+    /* Guard against doorsFab being re-added */
+    if(document.body){
+      const obs = new MutationObserver(() => {
+        if(document.getElementById('doorsFab')) _removeDoorsFab();
+      });
+      obs.observe(document.body, { childList: true });
+    }
+
+    console.log('%cSpurana ✦ UI Polish v2 — duplicate ⛩ gone, env-strip solid, battery elegant',
+      'background:linear-gradient(135deg,#10B981,#3ECF8E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  COSMIC CALL SOUND + PRESENCE + FILTERS — Spurana special     ║
+     ║                                                                ║
+     ║  A · SOUNDS (synthesized, cosmic, no files):                   ║
+     ║      · Outgoing ring — a slow celestial pulse loop             ║
+     ║      · Incoming ring — a brighter beckoning loop               ║
+     ║      · Connected — an ascending chime                          ║
+     ║      · Ended/dropped — a soft descending fade                  ║
+     ║      · Network strain — a gentle warble warning                ║
+     ║  B · PRESENCE — check the beloved's online state before        ║
+     ║      ringing; if away, a serene "in another realm" message     ║
+     ║  C · FILTERS — voice + vision effects, Spurana-flavoured:       ║
+     ║      · Voice: Natural · Ethereal · Deep · Bright · Cosmic       ║
+     ║      · Vision: Natural · Aura · Dreamy · Ember · Moonlit · Noir ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function CosmicCallSoundFilters(){
+    'use strict';
+
+    /* ───────────────────────────────────────────────────────────────
+       A · COSMIC CALL SOUNDS (Web Audio, looping)
+       ─────────────────────────────────────────────────────────────── */
+    let _sndCtx = null;
+    function _ctx(){
+      if(!_sndCtx) _sndCtx = new (window.AudioContext||window.webkitAudioContext)();
+      if(_sndCtx.state === 'suspended') _sndCtx.resume();
+      return _sndCtx;
+    }
+    let _ringLoop = null;
+
+    function _chord(freqs, dur, vol, when, type){
+      const c = _ctx();
+      const t0 = c.currentTime + (when||0);
+      freqs.forEach(f => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = type || 'sine';
+        o.frequency.value = f;
+        o.connect(g); g.connect(c.destination);
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(vol, t0 + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.start(t0); o.stop(t0 + dur + 0.05);
+      });
+    }
+
+    /* Outgoing ring — a slow, hopeful celestial pulse every 3.2s */
+    function _startOutgoingRing(){
+      _stopRing();
+      const pulse = () => {
+        _chord([330, 440], 0.5, 0.10, 0, 'sine');
+        _chord([494, 660], 0.6, 0.08, 0.28, 'sine');
+      };
+      pulse();
+      _ringLoop = setInterval(pulse, 3200);
+    }
+    /* Incoming ring — brighter, beckoning, every 2.6s */
+    function _startIncomingRing(){
+      _stopRing();
+      const pulse = () => {
+        _chord([523, 659, 784], 0.45, 0.10, 0, 'triangle');
+        _chord([659, 880], 0.4, 0.07, 0.3, 'sine');
+      };
+      pulse();
+      _ringLoop = setInterval(pulse, 2600);
+    }
+    function _stopRing(){ if(_ringLoop){ clearInterval(_ringLoop); _ringLoop = null; } }
+
+    /* Connected — ascending chime */
+    function _playConnected(){
+      _stopRing();
+      [392, 523, 659, 784, 1047].forEach((f,i) => _chord([f], 0.4, 0.09, i*0.09, 'sine'));
+    }
+    /* Ended — soft descending fade */
+    function _playEnded(){
+      _stopRing();
+      [784, 587, 440, 330].forEach((f,i) => _chord([f], 0.45, 0.08, i*0.11, 'sine'));
+    }
+    /* Network strain — gentle warble (called when quality drops to poor) */
+    let _lastWarble = 0;
+    function _playNetworkStrain(){
+      const now = Date.now();
+      if(now - _lastWarble < 8000) return; /* don't nag */
+      _lastWarble = now;
+      const c = _ctx(), t0 = c.currentTime;
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'sine'; o.connect(g); g.connect(c.destination);
+      o.frequency.setValueAtTime(440, t0);
+      o.frequency.linearRampToValueAtTime(360, t0+0.18);
+      o.frequency.linearRampToValueAtTime(440, t0+0.36);
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.06, t0+0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+0.5);
+      o.start(t0); o.stop(t0+0.55);
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       B · PRESENCE — is the beloved online before we ring?
+       ─────────────────────────────────────────────────────────────── */
+    function _activePartnerUid(){
+      try{
+        if(window._msc && window._msc.state){
+          const st = window._msc.state();
+          return st.activePartnerUid || null;
+        }
+      }catch(_){}
+      return null;
+    }
+
+    async function _partnerOnline(){
+      /* Returns {online, lastSeen, name} or null if unknown */
+      if(typeof db === 'undefined' || !db) return null;
+      const uid = _activePartnerUid();
+      try{
+        let snap;
+        if(uid){
+          snap = await db.ref('users/' + uid).once('value');
+        } else {
+          /* legacy single-partner: find the other user */
+          const all = (await db.ref('users').once('value')).val() || {};
+          const myUid = (typeof me!=='undefined'&&me)?me.uid:null;
+          const otherUid = Object.keys(all).find(u => u !== myUid);
+          snap = otherUid ? { val: () => all[otherUid] } : null;
+        }
+        const u = snap ? snap.val() : null;
+        if(!u) return null;
+        /* online if flag true OR seen in the last 60s */
+        const recent = u.lastSeen && (Date.now() - u.lastSeen < 60000);
+        return { online: !!(u.online || recent), lastSeen: u.lastSeen, name: u.name || 'Beloved' };
+      }catch(_){ return null; }
+    }
+
+    function _formatLastSeen(ts){
+      if(!ts) return 'a while ago';
+      const d = Date.now() - ts;
+      if(d < 3600000) return Math.max(1,Math.floor(d/60000)) + ' min ago';
+      if(d < 86400000) return Math.floor(d/3600000) + 'h ago';
+      return Math.floor(d/86400000) + ' days ago';
+    }
+
+    /* Serene "away" overlay */
+    function _showAway(info){
+      let ov = document.getElementById('ccAway');
+      if(!ov){
+        ov = document.createElement('div');
+        ov.id = 'ccAway';
+        ov.innerHTML = `
+          <div class="cc-away-card">
+            <div class="cc-away-moon">🌙</div>
+            <div class="cc-away-title" id="ccAwayTitle">In another realm</div>
+            <div class="cc-away-sub" id="ccAwaySub">Your beloved isn't present right now.</div>
+            <button class="cc-away-btn" id="ccAwayClose">Let it rest ✦</button>
+          </div>`;
+        document.body.appendChild(ov);
+        document.getElementById('ccAwayClose').addEventListener('click', () => ov.classList.remove('on'));
+        ov.addEventListener('click', e => { if(e.target===ov) ov.classList.remove('on'); });
+      }
+      const name = (info && info.name) ? info.name : 'Your beloved';
+      document.getElementById('ccAwayTitle').textContent = name + ' is away';
+      document.getElementById('ccAwaySub').textContent =
+        (info && info.lastSeen) ? ('Last seen ' + _formatLastSeen(info.lastSeen) + ' · they\'ll feel your call when they return.')
+                                : 'They\'ll feel your call when they return to the sanctuary.';
+      ov.classList.add('on');
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       C · FILTERS
+       ─────────────────────────────────────────────────────────────── */
+    const VOICE_FILTERS = ['Natural','Ethereal','Deep','Bright','Cosmic'];
+    const VISION_FILTERS = {
+      'Natural': 'none',
+      'Aura':    'saturate(1.3) contrast(1.05) drop-shadow(0 0 12px rgba(232,0,154,.4))',
+      'Dreamy':  'blur(0.4px) brightness(1.08) saturate(1.15) contrast(.95)',
+      'Ember':   'sepia(.35) saturate(1.4) hue-rotate(-18deg) brightness(1.05)',
+      'Moonlit': 'grayscale(.25) brightness(1.1) contrast(1.05) hue-rotate(200deg) saturate(.8)',
+      'Noir':    'grayscale(1) contrast(1.2) brightness(1.05)'
+    };
+    let _voiceFilter = 'Natural';
+    let _visionFilter = 'Natural';
+    let _voiceNodes = null;
+
+    /* Apply a voice filter by re-routing the local audio track through
+       Web Audio effect nodes and replacing the sender track. */
+    async function _applyVoiceFilter(name){
+      _voiceFilter = name;
+      const pc = window._pc, stream = window._localStream;
+      if(!pc || !stream) return;
+      const audioTrack = stream.getAudioTracks()[0];
+      if(!audioTrack) return;
+      try{
+        const c = _ctx();
+        /* tear down previous */
+        if(_voiceNodes){ try{ _voiceNodes.src.disconnect(); }catch(_){}; _voiceNodes = null; }
+        if(name === 'Natural'){
+          /* restore raw track */
+          const sender = pc.getSenders().find(s=>s.track&&s.track.kind==='audio');
+          if(sender && sender.track !== audioTrack) await sender.replaceTrack(audioTrack);
+          return;
+        }
+        const src = c.createMediaStreamSource(new MediaStream([audioTrack]));
+        const dest = c.createMediaStreamDestination();
+        let last = src;
+        if(name === 'Deep'){
+          const lp = c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=900;
+          last.connect(lp); last = lp;
+        } else if(name === 'Bright'){
+          const hp = c.createBiquadFilter(); hp.type='highshelf'; hp.frequency.value=2500; hp.gain.value=8;
+          last.connect(hp); last = hp;
+        } else if(name === 'Ethereal'){
+          /* short feedback delay = soft reverb shimmer */
+          const dl = c.createDelay(); dl.delayTime.value=0.12;
+          const fb = c.createGain(); fb.gain.value=0.35;
+          const wet = c.createGain(); wet.gain.value=0.5;
+          last.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(wet); wet.connect(dest);
+          last.connect(dest);
+          _voiceNodes = { src };
+          const sender = pc.getSenders().find(s=>s.track&&s.track.kind==='audio');
+          if(sender) await sender.replaceTrack(dest.stream.getAudioTracks()[0]);
+          return;
+        } else if(name === 'Cosmic'){
+          /* detune chorus via two delays */
+          const d1=c.createDelay(); d1.delayTime.value=0.02;
+          const d2=c.createDelay(); d2.delayTime.value=0.035;
+          last.connect(d1); last.connect(d2);
+          d1.connect(dest); d2.connect(dest); last.connect(dest);
+          _voiceNodes = { src };
+          const sender = pc.getSenders().find(s=>s.track&&s.track.kind==='audio');
+          if(sender) await sender.replaceTrack(dest.stream.getAudioTracks()[0]);
+          return;
+        }
+        last.connect(dest);
+        _voiceNodes = { src };
+        const sender = pc.getSenders().find(s=>s.track&&s.track.kind==='audio');
+        if(sender) await sender.replaceTrack(dest.stream.getAudioTracks()[0]);
+      }catch(e){ if(typeof toast==='function') toast('Voice filter unavailable'); }
+    }
+
+    function _applyVisionFilter(name){
+      _visionFilter = name;
+      const filt = VISION_FILTERS[name] || 'none';
+      const rv = document.getElementById('rtcRemoteVideo');
+      const lv = document.getElementById('rtcLocalVideo');
+      if(rv) rv.style.filter = filt;
+      if(lv) lv.style.filter = filt;
+    }
+
+    /* Filter selector sheet */
+    function _injectFilterSheet(){
+      if(document.getElementById('ccFilterSheet')) return;
+      const sheet = document.createElement('div');
+      sheet.id = 'ccFilterSheet';
+      sheet.innerHTML = `
+        <div class="cc-fs-card">
+          <div class="cc-fs-title">✦ Touch of the Cosmos</div>
+          <div class="cc-fs-group" id="ccFsVoiceGroup">
+            <div class="cc-fs-label">Voice</div>
+            <div class="cc-fs-chips" id="ccFsVoice"></div>
+          </div>
+          <div class="cc-fs-group" id="ccFsVisionGroup">
+            <div class="cc-fs-label">Vision</div>
+            <div class="cc-fs-chips" id="ccFsVision"></div>
+          </div>
+          <button class="cc-fs-done" id="ccFsDone">Done</button>
+        </div>`;
+      document.body.appendChild(sheet);
+      const vg = sheet.querySelector('#ccFsVoice');
+      VOICE_FILTERS.forEach(n => {
+        const b = document.createElement('button');
+        b.className = 'cc-fs-chip' + (n===_voiceFilter?' on':'');
+        b.textContent = n;
+        b.addEventListener('click', () => {
+          vg.querySelectorAll('.cc-fs-chip').forEach(x=>x.classList.remove('on'));
+          b.classList.add('on'); _applyVoiceFilter(n);
+        });
+        vg.appendChild(b);
+      });
+      const vis = sheet.querySelector('#ccFsVision');
+      Object.keys(VISION_FILTERS).forEach(n => {
+        const b = document.createElement('button');
+        b.className = 'cc-fs-chip' + (n===_visionFilter?' on':'');
+        b.textContent = n;
+        b.addEventListener('click', () => {
+          vis.querySelectorAll('.cc-fs-chip').forEach(x=>x.classList.remove('on'));
+          b.classList.add('on'); _applyVisionFilter(n);
+        });
+        vis.appendChild(b);
+      });
+      sheet.querySelector('#ccFsDone').addEventListener('click', () => sheet.classList.remove('on'));
+      sheet.addEventListener('click', e => { if(e.target===sheet) sheet.classList.remove('on'); });
+    }
+    function _openFilters(){
+      _injectFilterSheet();
+      /* hide vision group for audio calls */
+      const stage = document.getElementById('rtcCall');
+      const isVideo = stage && stage.classList.contains('cc-video');
+      const vg = document.getElementById('ccFsVisionGroup');
+      if(vg) vg.style.display = isVideo ? 'block' : 'none';
+      document.getElementById('ccFilterSheet').classList.add('on');
+    }
+
+    /* Add a ✨ filter button into the call controls */
+    function _injectFilterButton(){
+      const controls = document.querySelector('#rtcCall .rtc-controls');
+      if(!controls || document.getElementById('ccFilterBtn')) return;
+      const btn = document.createElement('button');
+      btn.className = 'rtc-btn cc-ctrl';
+      btn.id = 'ccFilterBtn';
+      btn.innerHTML = '✨';
+      btn.title = 'Cosmic filters';
+      btn.addEventListener('click', e => { e.stopPropagation(); _openFilters(); });
+      const endBtn = controls.querySelector('.end');
+      if(endBtn) controls.insertBefore(btn, endBtn); else controls.appendChild(btn);
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       STYLES
+       ─────────────────────────────────────────────────────────────── */
+    if(!document.getElementById('ccSoundFilterStyles')){
+      const s = document.createElement('style');
+      s.id = 'ccSoundFilterStyles';
+      s.textContent = `
+#ccAway{ position:fixed; inset:0; z-index:9750; display:none; align-items:center; justify-content:center;
+  background:radial-gradient(ellipse at 50% 30%, rgba(20,10,34,.96), rgba(6,3,12,.98)); backdrop-filter:blur(10px); padding:24px; }
+#ccAway.on{ display:flex; animation:ccFade .4s ease; }
+@keyframes ccFade{ from{opacity:0} to{opacity:1} }
+.cc-away-card{ text-align:center; max-width:340px; }
+.cc-away-moon{ font-size:64px; filter:drop-shadow(0 0 24px rgba(180,180,255,.5)); animation:ccMoonFloat 4s ease-in-out infinite; }
+@keyframes ccMoonFloat{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+.cc-away-title{ font-family:'Cinzel Decorative',serif; font-size:22px; color:#fff; margin:16px 0 8px; letter-spacing:.04em; }
+.cc-away-sub{ font-family:'Cormorant Garamond',serif; font-style:italic; font-size:15px; color:rgba(232,225,245,.7); line-height:1.6; margin-bottom:24px; }
+.cc-away-btn{ padding:12px 28px; border-radius:999px; border:1px solid rgba(232,0,154,.4);
+  background:linear-gradient(135deg,rgba(232,0,154,.25),rgba(232,0,154,.1)); color:#FFD9EC;
+  font-family:'Cinzel Decorative',serif; font-size:13px; letter-spacing:.08em; cursor:pointer; }
+.cc-away-btn:active{ transform:scale(.96); }
+
+#ccFilterSheet{ position:fixed; inset:0; z-index:9760; display:none; align-items:flex-end; justify-content:center;
+  background:rgba(6,3,12,.6); backdrop-filter:blur(8px); }
+#ccFilterSheet.on{ display:flex; animation:ccFade .3s ease; }
+.cc-fs-card{ width:100%; max-width:520px; margin:0 12px calc(env(safe-area-inset-bottom,0) + 16px);
+  background:linear-gradient(180deg, rgba(28,12,42,.98), rgba(14,7,24,.98)); border:1px solid rgba(232,0,154,.3);
+  border-radius:24px; padding:20px; box-shadow:0 -10px 50px rgba(0,0,0,.6); animation:ccSheetUp .35s cubic-bezier(.2,.9,.3,1); }
+@keyframes ccSheetUp{ from{transform:translateY(40px);opacity:.6} to{transform:translateY(0);opacity:1} }
+.cc-fs-title{ font-family:'Cinzel Decorative',serif; font-size:16px; text-align:center; margin-bottom:16px;
+  background:linear-gradient(135deg,#FF6B9D,#E2C28A); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.cc-fs-group{ margin-bottom:16px; }
+.cc-fs-label{ font-family:'Orbitron',monospace; font-size:9px; letter-spacing:.25em; color:rgba(255,184,208,.6); text-transform:uppercase; margin-bottom:8px; }
+.cc-fs-chips{ display:flex; gap:8px; flex-wrap:wrap; }
+.cc-fs-chip{ padding:9px 16px; border-radius:999px; border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.05); color:rgba(242,235,248,.8); font-family:'Rajdhani',sans-serif;
+  font-size:13px; letter-spacing:.05em; cursor:pointer; transition:.2s; }
+.cc-fs-chip.on{ background:linear-gradient(135deg,#E8009A,#FF6B9D); color:#fff; border-color:transparent; box-shadow:0 0 16px rgba(232,0,154,.5); }
+.cc-fs-done{ width:100%; padding:13px; border-radius:14px; border:none; margin-top:4px;
+  background:rgba(255,255,255,.08); color:#F2EBF8; font-family:'Cinzel Decorative',serif; font-size:13px; letter-spacing:.08em; cursor:pointer; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       WIRE INTO THE CALL LIFECYCLE
+       ─────────────────────────────────────────────────────────────── */
+    function _hook(){
+      /* Presence gate + outgoing ring on startRealCall */
+      if(typeof window.startRealCall === 'function' && !window.startRealCall.__sndWrap){
+        const orig = window.startRealCall;
+        window.startRealCall = async function(type){
+          /* check presence first */
+          const info = await _partnerOnline();
+          if(info && info.online === false){
+            _playEnded();
+            _showAway(info);
+            return;
+          }
+          const r = orig.apply(this, arguments);
+          _startOutgoingRing();
+          return r;
+        };
+        window.startRealCall.__sndWrap = true;
+      }
+
+      /* Incoming ring when an incoming call shows */
+      if(typeof window._showIncomingCall === 'function' && !window._showIncomingCall.__sndWrap){
+        const orig = window._showIncomingCall;
+        window._showIncomingCall = function(){
+          const r = orig.apply(this, arguments);
+          _startIncomingRing();
+          return r;
+        };
+        window._showIncomingCall.__sndWrap = true;
+      }
+
+      /* Connected chime + stop ring when remote arrives */
+      if(typeof window._rtcStartPresence === 'function' && !window._rtcStartPresence.__sndWrap){
+        const orig = window._rtcStartPresence;
+        window._rtcStartPresence = function(){
+          _playConnected();
+          _injectFilterButton();
+          return orig.apply(this, arguments);
+        };
+        window._rtcStartPresence.__sndWrap = true;
+      }
+
+      /* Stop ring on accept */
+      if(typeof window._rtcAccept === 'function' && !window._rtcAccept.__sndWrap){
+        const orig = window._rtcAccept;
+        window._rtcAccept = function(){ _stopRing(); return orig.apply(this, arguments); };
+        window._rtcAccept.__sndWrap = true;
+      }
+
+      /* Ended sound + cleanup on hangup/decline */
+      ['_rtcHangup','_rtcDecline'].forEach(fn => {
+        if(typeof window[fn] === 'function' && !window[fn].__sndWrap){
+          const orig = window[fn];
+          window[fn] = function(){
+            _stopRing(); _playEnded();
+            _voiceFilter='Natural'; _visionFilter='Natural';
+            return orig.apply(this, arguments);
+          };
+          window[fn].__sndWrap = true;
+        }
+      });
+    }
+
+    let _tries = 0;
+    const _timer = setInterval(() => { _tries++; _hook(); if(_tries>50) clearInterval(_timer); }, 350);
+
+    /* Network strain: listen to the cosmic-call quality dots (poor) */
+    setInterval(() => {
+      const q1 = document.getElementById('ccQ1');
+      const stage = document.getElementById('rtcCall');
+      if(stage && stage.style.display !== 'none' && q1 && q1.classList.contains('poor')){
+        _playNetworkStrain();
+      }
+    }, 3000);
+
+    window._callFX = {
+      outgoingRing: _startOutgoingRing, incomingRing: _startIncomingRing, stopRing: _stopRing,
+      connected: _playConnected, ended: _playEnded, networkStrain: _playNetworkStrain,
+      partnerOnline: _partnerOnline, openFilters: _openFilters,
+      voiceFilter: _applyVoiceFilter, visionFilter: _applyVisionFilter
+    };
+
+    console.log('%cSpurana ✦ Cosmic Call Sound + Presence + Filters online',
+      'background:linear-gradient(135deg,#E8009A,#7C3AED);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Rings · connect/end chimes · network warble · offline "away" · voice+vision filters');
+  })();
+
+
+
 
   /* ╔════════════════════════════════════════════════════════════════╗
      ║  SACRED CALL ENGINE — calls that truly connect, in a cosmos    ║

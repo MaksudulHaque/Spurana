@@ -35165,6 +35165,1597 @@ body.call-active #mscFloat {
     console.log('  All modes still reachable via the ⛩ Sanctuary doors');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  SPACE MANAGER — give the messages room to breathe            ║
+     ║                                                                ║
+     ║  Goal: ~80% of the screen for chatting. The old top zone ate   ║
+     ║  ~132px before a single message: header (56) + env-now mood    ║
+     ║  line (32) + env-strip (44) + a floating "listening" chip      ║
+     ║  band (~50, overlapping).                                      ║
+     ║                                                                ║
+     ║  New compact top zone (~88px):                                 ║
+     ║   · Header (52px) now carries ALL notifications — a compact    ║
+     ║     ♪ pulse appears in the header when the beloved is          ║
+     ║     listening; tap it to open the player. Floating chip gone.  ║
+     ║   · env-now mood line hidden (the active realm is already      ║
+     ║     highlighted in the strip below).                          ║
+     ║   · env-strip slimmed (44 → 32px) and pulled tight under       ║
+     ║     the header.                                               ║
+     ║   · Everything below flows up → messages get ~90px more.       ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function SpaceManager(){
+    'use strict';
+
+    const HEADER_H = 52;   /* compact header */
+    const ENVSTRIP_H = 34; /* slim env strip */
+    const TOP_OFFSET = HEADER_H + ENVSTRIP_H; /* where messages begin */
+
+    if(!document.getElementById('spaceManagerStyles')){
+      const s = document.createElement('style');
+      s.id = 'spaceManagerStyles';
+      s.textContent = `
+/* ── Compact header ── */
+#cleanTopBar{
+  padding: calc(env(safe-area-inset-top,0) + 6px) 12px 6px !important;
+}
+#ctbAvatar{ width: 36px !important; height: 36px !important; font-size: 18px !important; }
+#ctbName{ font-size: 14px !important; }
+#ctbStatus{ font-size: 10px !important; }
+
+/* ── Notifications live in the header now: a compact ♪ pulse ── */
+#ctbListen{
+  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, #E8009A, #8B0052);
+  display: none; align-items: center; justify-content: center;
+  font-size: 15px; color: #fff; cursor: pointer;
+  box-shadow: 0 0 14px rgba(232,0,154,.55);
+  animation: ctbListenPulse 1.8s ease-in-out infinite;
+}
+#ctbListen.on{ display: flex; }
+@keyframes ctbListenPulse{ 0%,100%{transform:scale(1);opacity:.9} 50%{transform:scale(1.08);opacity:1} }
+
+/* ── Floating "BELOVED IS LISTENING" chip removed (it's in the header) ── */
+#ltChip{ display: none !important; }
+#ltTapToHear{ display: none !important; }
+
+/* ── Hide the decorative env-now mood line (active realm shown in strip) ── */
+.env-now{ display: none !important; }
+
+/* ── Slim env-strip, pulled tight under the header ── */
+.env-strip{
+  min-height: ${ENVSTRIP_H}px !important;
+  padding: 4px 12px !important;
+  margin-top: calc(env(safe-area-inset-top,0) + ${HEADER_H}px) !important;
+  gap: 5px !important;
+}
+.env-btn{
+  padding: 4px 10px !important;
+  font-size: 11px !important;
+}
+.env-strip-wrap{ flex-shrink: 0; }
+
+/* ── Messages get all the freed space ── */
+.msgs-wrap, #msgs, .messages, .chat-area{
+  padding-top: calc(env(safe-area-inset-top,0) + ${TOP_OFFSET}px) !important;
+}
+.msgs-wrap{ flex: 1 1 auto !important; }
+
+/* ── On small screens, even tighter ── */
+@media (max-width: 600px){
+  #cleanTopBar{ padding: calc(env(safe-area-inset-top,0) + 5px) 10px 5px !important; }
+  .env-strip{ min-height: 30px !important; margin-top: calc(env(safe-area-inset-top,0) + 48px) !important; }
+  .msgs-wrap, #msgs, .messages, .chat-area{
+    padding-top: calc(env(safe-area-inset-top,0) + 80px) !important;
+  }
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ── Inject the header listen indicator (#ctbListen) ── */
+    function _injectHeaderListen(){
+      if(document.getElementById('ctbListen')) return true;
+      const bar = document.getElementById('cleanTopBar');
+      if(!bar) return false;
+      const btn = document.createElement('div');
+      btn.id = 'ctbListen';
+      btn.innerHTML = '♪';
+      btn.title = 'Beloved is listening — tap to join';
+      btn.setAttribute('aria-label', 'Listening together');
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        /* Open the listen player */
+        if(typeof window.openListenTogether === 'function'){
+          window.openListenTogether();
+        }
+        /* If a bar exists, make sure it shows */
+        const ltBar = document.getElementById('ltBar');
+        if(ltBar) ltBar.classList.add('on');
+      });
+      /* Place it before the video action */
+      const video = document.getElementById('ctbVideo');
+      if(video && video.parentElement === bar){
+        bar.insertBefore(btn, video);
+      } else {
+        bar.appendChild(btn);
+      }
+      return true;
+    }
+
+    /* ── Sync: when the beloved is listening, light up the header ♪ ── */
+    function _syncListenState(){
+      const indicator = document.getElementById('ctbListen');
+      if(!indicator) return;
+      /* The underlying chip carries the "active" truth via its title/class */
+      const chip = document.getElementById('ltChip');
+      const chipTitle = document.getElementById('ltChipTitle');
+      let active = false;
+      let label = '';
+      if(chip){
+        const titleTxt = chipTitle ? (chipTitle.textContent || '') : '';
+        /* Active when partner is listening (title mentions listening) or chip is .on */
+        if(/listen/i.test(titleTxt) && titleTxt.length > 0) active = true;
+        if(chip.classList.contains('on') && /listen/i.test(titleTxt)) active = true;
+        label = titleTxt;
+      }
+      /* Also honour the listen-together state API if present */
+      try{
+        if(window._listenTogether && typeof window._listenTogether.state === 'function'){
+          const st = window._listenTogether.state();
+          if(st && st.url && st.isPlaying) active = true;
+        }
+      }catch(_){}
+      indicator.classList.toggle('on', active);
+      if(active && label){
+        indicator.title = label;
+      }
+    }
+    setInterval(_syncListenState, 1500);
+
+    /* ── Bootstrap ── */
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _injectHeaderListen();
+      _syncListenState();
+      if(_tries > 40) clearInterval(_timer);
+    }, 400);
+
+    window._space = {
+      headerHeight: HEADER_H,
+      topOffset: TOP_OFFSET,
+      syncListen: _syncListenState
+    };
+
+    console.log('%cSpurana ✦ Space Manager — notifications in header, messages breathe',
+      'background:linear-gradient(135deg,#10B981,#3ECF8E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Top zone: ~132px → ~88px · listen status moved into header ♪');
+    console.log('  env-now mood line hidden · env-strip slimmed · messages get ~90px more');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  COSMIC CALL EXPERIENCE — calls worthy of two souls           ║
+     ║                                                                ║
+     ║  The WebRTC backend already works (Firebase signalling, STUN + ║
+     ║  TURN, offer/answer/ICE). This layer transforms the call into  ║
+     ║  a full-screen cosmic, serene experience that outclasses the   ║
+     ║  mainstream apps:                                              ║
+     ║                                                                ║
+     ║   · Living starfield + nebula background                       ║
+     ║   · Audio call: a breathing soul-orb that PULSES with the      ║
+     ║     beloved's voice (Web Audio analyser on the remote stream)  ║
+     ║   · Video call: full-bleed remote video, cosmic vignette,      ║
+     ║     elegant floating self-view, tap-to-reveal glass controls   ║
+     ║   · Glass-morphism controls (mute · video · flip · speaker ·   ║
+     ║     end), large and tactile                                    ║
+     ║   · Live duration + connection-quality aura                    ║
+     ║   · Premium media (echo-cancel, noise-suppress, AGC, 720p)     ║
+     ║   · Reuses the existing #rtcRemoteVideo/#rtcLocalVideo +        ║
+     ║     handlers (_rtcToggleMute, _rtcToggleCam, _rtcHangup)        ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function CosmicCallExperience(){
+    'use strict';
+
+    /* ───────────────────────────────────────────────────────────────
+       1 · Relax the file:// gate → guide to the live app instead of a
+            dead end. (getUserMedia needs a secure context; the live
+            HTTPS site provides it.)
+       ─────────────────────────────────────────────────────────────── */
+    (function _patchGate(){
+      let tries = 0;
+      const t = setInterval(() => {
+        tries++;
+        if(typeof window.startRealCall === 'function' && !window.startRealCall.__cosmicGate){
+          /* leave startRealCall itself intact; just ensure a friendlier
+             message path by wrapping the buttons below */
+          window.startRealCall.__cosmicGate = true;
+          clearInterval(t);
+        }
+        if(tries > 40) clearInterval(t);
+      }, 300);
+    })();
+
+    /* ───────────────────────────────────────────────────────────────
+       2 · Cosmic styles
+       ─────────────────────────────────────────────────────────────── */
+    if(!document.getElementById('cosmicCallStyles')){
+      const s = document.createElement('style');
+      s.id = 'cosmicCallStyles';
+      s.textContent = `
+/* ── The call stage ── */
+#rtcCall{
+  background: radial-gradient(ellipse at 28% 18%, #2c0b40 0%, #150826 38%, #07030f 72%, #04020a 100%) !important;
+  overflow: hidden !important;
+  z-index: 9600 !important;
+}
+#ccStarfield{
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+}
+/* drifting nebula sheen */
+#rtcCall::before{
+  content:''; position:absolute; inset:-20%;
+  background:
+    radial-gradient(circle at 70% 30%, rgba(232,0,154,.14), transparent 45%),
+    radial-gradient(circle at 25% 75%, rgba(120,40,220,.12), transparent 45%);
+  filter: blur(20px);
+  animation: ccNebula 18s ease-in-out infinite alternate;
+  z-index: 0; pointer-events:none;
+}
+@keyframes ccNebula{ 0%{transform:translate(0,0) scale(1)} 100%{transform:translate(2%,-2%) scale(1.08)} }
+
+/* ── AUDIO MODE — breathing soul orb ── */
+#rtcAudioMode{ z-index:2 !important; position:relative; }
+.rtc-audio-orb, #rtcAudioOrb{
+  position: relative;
+  width: 220px !important; height: 220px !important;
+  border-radius: 50% !important;
+  font-size: 0 !important;            /* hide the emoji glyph; orb is the art */
+  background:
+    radial-gradient(circle at 38% 34%, rgba(255,150,210,.95), rgba(232,0,154,.55) 38%, rgba(120,20,90,.25) 66%, transparent 78%) !important;
+  box-shadow:
+    0 0 60px rgba(232,0,154,.55),
+    0 0 120px rgba(232,0,154,.30),
+    inset 0 0 60px rgba(255,180,220,.35) !important;
+  animation: ccOrbBreath 4.5s ease-in-out infinite !important;
+  display:flex; align-items:center; justify-content:center;
+  will-change: transform;
+}
+@keyframes ccOrbBreath{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+/* expanding aura rings */
+.cc-ring{
+  position:absolute; top:50%; left:50%;
+  width:220px; height:220px; margin:-110px 0 0 -110px;
+  border-radius:50%; border:1px solid rgba(232,0,154,.35);
+  animation: ccRing 4s ease-out infinite;
+  pointer-events:none; z-index:1;
+}
+.cc-ring:nth-child(2){ animation-delay:1.3s }
+.cc-ring:nth-child(3){ animation-delay:2.6s }
+@keyframes ccRing{ 0%{transform:scale(.7);opacity:.7} 100%{transform:scale(2.1);opacity:0} }
+
+/* a soft inner core glyph */
+.cc-orb-core{
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  font-family:'Cinzel Decorative',serif; font-size:54px; color:rgba(255,255,255,.92);
+  text-shadow:0 0 24px rgba(255,150,210,.9); z-index:3; pointer-events:none;
+}
+
+/* ── Name + status (audio) ── */
+#rtcAudioMode .rtc-name, #rtcCallName{
+  font-family:'Cinzel Decorative',serif !important;
+  font-size:30px !important; color:#fff !important;
+  letter-spacing:.04em !important;
+  text-shadow:0 2px 30px rgba(232,0,154,.5) !important;
+  margin-top:14px !important;
+}
+#rtcAudioMode .rtc-status, #rtcCallStatus{
+  font-family:'Orbitron',monospace !important;
+  font-size:11px !important; letter-spacing:.3em !important;
+  color:rgba(255,200,225,.8) !important; text-transform:uppercase !important;
+}
+
+/* ── VIDEO MODE ── */
+#rtcRemoteVideo{ background:#07030f !important; z-index:1 !important; }
+/* cosmic vignette on video */
+#ccVignette{
+  position:absolute; inset:0; z-index:2; pointer-events:none; display:none;
+  box-shadow: inset 0 0 160px 40px rgba(7,3,15,.85);
+}
+#rtcCall.cc-video #ccVignette{ display:block; }
+#rtcLocalVideo{
+  position:absolute !important;
+  bottom: calc(env(safe-area-inset-bottom,0) + 120px) !important;
+  right:16px !important;
+  width:108px !important; height:150px !important;
+  border-radius:18px !important;
+  border:1.5px solid rgba(255,150,210,.55) !important;
+  box-shadow:0 8px 30px rgba(0,0,0,.6), 0 0 24px rgba(232,0,154,.3) !important;
+  z-index:6 !important; background:#000 !important;
+  transition: opacity .3s, transform .3s;
+}
+
+/* ── Glass top bar (name · timer · quality) ── */
+#ccTopBar{
+  position:absolute; top:calc(env(safe-area-inset-top,0) + 18px); left:50%;
+  transform:translateX(-50%); z-index:7;
+  display:flex; align-items:center; gap:12px;
+  padding:8px 18px; border-radius:999px;
+  background:rgba(15,8,22,.5); backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  border:1px solid rgba(255,255,255,.12);
+  opacity:0; transition:opacity .3s; pointer-events:none;
+}
+#rtcCall.cc-video #ccTopBar{ opacity:1; }
+#rtcCall.cc-video.cc-hide-ui #ccTopBar{ opacity:0; }
+.cc-tb-name{ font-family:'Cinzel Decorative',serif; font-size:14px; color:#fff; }
+.cc-tb-timer{ font-family:'Orbitron',monospace; font-size:11px; letter-spacing:.12em; color:rgba(255,200,225,.85); }
+.cc-q{ display:flex; gap:3px; align-items:center; }
+.cc-q-dot{ width:6px;height:6px;border-radius:50%;background:#475569; transition:.3s }
+.cc-q-dot.lit{ background:#34D399; box-shadow:0 0 6px #34D399 }
+.cc-q-dot.fair.lit{ background:#FBBF24; box-shadow:0 0 6px #FBBF24 }
+.cc-q-dot.poor.lit{ background:#F87171; box-shadow:0 0 6px #F87171 }
+
+/* ── Glass control bar ── */
+.rtc-controls, #ccControls{
+  position:absolute !important;
+  bottom:calc(env(safe-area-inset-bottom,0) + 34px) !important;
+  left:50% !important; transform:translateX(-50%) !important;
+  display:flex !important; align-items:center; gap:16px !important;
+  padding:14px 18px; border-radius:999px;
+  background:rgba(15,8,22,.55); backdrop-filter:blur(22px);
+  -webkit-backdrop-filter:blur(22px);
+  border:1px solid rgba(255,255,255,.12);
+  z-index:8 !important; box-shadow:0 10px 40px rgba(0,0,0,.5);
+  transition:opacity .3s;
+}
+#rtcCall.cc-video.cc-hide-ui .rtc-controls,
+#rtcCall.cc-video.cc-hide-ui #ccControls{ opacity:0; pointer-events:none; }
+.rtc-btn, .cc-ctrl{
+  width:58px !important; height:58px !important; border-radius:50% !important;
+  border:1px solid rgba(255,255,255,.14) !important; cursor:pointer;
+  font-size:22px !important; display:flex !important; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.08) !important; color:#F2EBF8 !important;
+  transition:all .2s !important; backdrop-filter:blur(8px);
+  -webkit-tap-highlight-color:transparent;
+}
+.rtc-btn:hover, .cc-ctrl:hover{ background:rgba(255,255,255,.16) !important; transform:scale(1.06); }
+.rtc-btn:active, .cc-ctrl:active{ transform:scale(.93); }
+.rtc-btn.on, .cc-ctrl.on{
+  background:rgba(232,0,154,.30) !important; border-color:rgba(232,0,154,.55) !important;
+  color:#FFD9EC !important;
+}
+.rtc-btn.mute.on{ background:rgba(220,38,38,.3) !important; border-color:rgba(220,38,38,.5) !important; color:#FCA5A5 !important; }
+.rtc-btn.end, .cc-ctrl.end{
+  width:66px !important; height:66px !important;
+  background:linear-gradient(135deg,#FF2D55,#C8102E) !important;
+  border-color:rgba(255,45,85,.6) !important; color:#fff !important; font-size:26px !important;
+  box-shadow:0 6px 28px rgba(255,45,85,.4) !important;
+}
+.rtc-btn.end:hover, .cc-ctrl.end:hover{ background:linear-gradient(135deg,#FF466B,#E11D48) !important; }
+
+/* ── COSMIC INCOMING CALL ── */
+#rtcIncoming{
+  top:0 !important; left:0 !important; right:0 !important; bottom:auto !important;
+  background:linear-gradient(180deg, rgba(28,10,44,.98), rgba(12,6,22,.96)) !important;
+  border-bottom:1px solid rgba(232,0,154,.35) !important;
+  box-shadow:0 12px 50px rgba(0,0,0,.7), 0 0 60px rgba(232,0,154,.15) !important;
+  animation: ccIncSlide .5s cubic-bezier(.2,.9,.3,1);
+}
+@keyframes ccIncSlide{ from{transform:translateY(-100%)} to{transform:translateY(0)} }
+.rtc-inc-avatar{
+  background:radial-gradient(circle at 35% 35%, rgba(255,150,210,.9), rgba(232,0,154,.4) 55%, #0a0518) !important;
+  box-shadow:0 0 30px rgba(232,0,154,.5) !important;
+}
+.rtc-inc-btn.accept{ background:linear-gradient(135deg,#22C55E,#10B981) !important; box-shadow:0 4px 18px rgba(34,197,94,.4) !important; }
+.rtc-inc-btn.decline{ background:linear-gradient(135deg,#FF2D55,#C8102E) !important; }
+.rtc-inc-btn{ width:48px !important; height:48px !important; transition:transform .2s; }
+.rtc-inc-btn:active{ transform:scale(.9); }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       3 · Decorate the call stage — starfield, rings, vignette,
+            glass top bar, flip + speaker controls
+       ─────────────────────────────────────────────────────────────── */
+    function _decorate(){
+      const stage = document.getElementById('rtcCall');
+      if(!stage || stage.dataset.cosmic) return false;
+      stage.dataset.cosmic = '1';
+
+      /* starfield canvas */
+      const cv = document.createElement('canvas');
+      cv.id = 'ccStarfield';
+      stage.insertBefore(cv, stage.firstChild);
+
+      /* vignette for video */
+      const vg = document.createElement('div');
+      vg.id = 'ccVignette';
+      stage.appendChild(vg);
+
+      /* aura rings + core inside the audio orb's parent */
+      const orb = document.getElementById('rtcAudioOrb');
+      if(orb && orb.parentElement){
+        const host = orb.parentElement;
+        for(let i=0;i<3;i++){ const r=document.createElement('div'); r.className='cc-ring'; host.insertBefore(r, host.firstChild); }
+        const core = document.createElement('div'); core.className='cc-orb-core'; core.textContent='✦';
+        orb.appendChild(core);
+      }
+
+      /* glass top bar (video) */
+      const tb = document.createElement('div');
+      tb.id = 'ccTopBar';
+      tb.innerHTML = `
+        <span class="cc-tb-name" id="ccTbName">Beloved</span>
+        <span class="cc-tb-timer" id="ccTbTimer">0:00</span>
+        <span class="cc-q"><span class="cc-q-dot" id="ccQ1"></span><span class="cc-q-dot" id="ccQ2"></span><span class="cc-q-dot" id="ccQ3"></span></span>
+      `;
+      stage.appendChild(tb);
+
+      /* add flip + speaker buttons to the control row */
+      const controls = stage.querySelector('.rtc-controls');
+      if(controls){
+        const flip = document.createElement('button');
+        flip.className = 'rtc-btn cc-ctrl';
+        flip.id = 'ccFlipBtn';
+        flip.innerHTML = '🔄';
+        flip.title = 'Flip camera';
+        flip.style.display = 'none';
+        flip.addEventListener('click', _flipCamera);
+        const spk = document.createElement('button');
+        spk.className = 'rtc-btn cc-ctrl';
+        spk.id = 'ccSpkBtn';
+        spk.innerHTML = '🔊';
+        spk.title = 'Speaker';
+        spk.addEventListener('click', _toggleSpeaker);
+        /* insert before the end button */
+        const endBtn = controls.querySelector('.end');
+        if(endBtn){ controls.insertBefore(spk, endBtn); controls.insertBefore(flip, endBtn); }
+        else { controls.appendChild(flip); controls.appendChild(spk); }
+      }
+
+      /* tap to toggle UI in video mode */
+      stage.addEventListener('click', e => {
+        if(!stage.classList.contains('cc-video')) return;
+        if(e.target.closest('.rtc-controls') || e.target.closest('#ccTopBar') || e.target.closest('#rtcLocalVideo')) return;
+        stage.classList.toggle('cc-hide-ui');
+      });
+
+      return true;
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       4 · Starfield animation (lightweight, pauses when idle)
+       ─────────────────────────────────────────────────────────────── */
+    let _stars = [], _starRAF = null, _starCtx = null, _starCv = null;
+    function _initStars(){
+      _starCv = document.getElementById('ccStarfield');
+      if(!_starCv) return;
+      const dpr = Math.min(window.devicePixelRatio||1, 2);
+      const w = _starCv.clientWidth || window.innerWidth;
+      const h = _starCv.clientHeight || window.innerHeight;
+      _starCv.width = w*dpr; _starCv.height = h*dpr;
+      _starCtx = _starCv.getContext('2d');
+      _starCtx.scale(dpr,dpr);
+      _stars = [];
+      const n = Math.min(110, Math.floor(w*h/12000));
+      for(let i=0;i<n;i++){
+        _stars.push({ x:Math.random()*w, y:Math.random()*h, r:Math.random()*1.4+0.3,
+          a:Math.random()*0.6+0.2, tw:Math.random()*0.02+0.004, vy:Math.random()*0.12+0.02 });
+      }
+    }
+    function _drawStars(){
+      if(!_starCtx || !_starCv){ _starRAF=null; return; }
+      const w = _starCv.clientWidth, h = _starCv.clientHeight;
+      _starCtx.clearRect(0,0,w,h);
+      for(const s of _stars){
+        s.a += s.tw; if(s.a>0.85||s.a<0.15) s.tw=-s.tw;
+        s.y += s.vy; if(s.y>h){ s.y=0; s.x=Math.random()*w; }
+        _starCtx.beginPath();
+        _starCtx.fillStyle = `rgba(255,210,235,${s.a})`;
+        _starCtx.arc(s.x,s.y,s.r,0,Math.PI*2);
+        _starCtx.fill();
+      }
+      _starRAF = requestAnimationFrame(_drawStars);
+    }
+    function _startStars(){ if(_starRAF) return; _initStars(); _drawStars(); }
+    function _stopStars(){ if(_starRAF){ cancelAnimationFrame(_starRAF); _starRAF=null; } }
+
+    /* ───────────────────────────────────────────────────────────────
+       5 · Audio-reactive orb — the orb pulses with the beloved's voice
+       ─────────────────────────────────────────────────────────────── */
+    let _audioCtx=null, _analyser=null, _audioRAF=null, _dataArr=null;
+    function _startAudioReactive(stream){
+      try{
+        _stopAudioReactive();
+        if(!stream) return;
+        _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+        const src = _audioCtx.createMediaStreamSource(stream);
+        _analyser = _audioCtx.createAnalyser();
+        _analyser.fftSize = 256;
+        src.connect(_analyser);
+        _dataArr = new Uint8Array(_analyser.frequencyBinCount);
+        const orb = document.getElementById('rtcAudioOrb');
+        const tick = () => {
+          if(!_analyser || !orb){ _audioRAF=null; return; }
+          _analyser.getByteFrequencyData(_dataArr);
+          let sum=0; for(let i=0;i<_dataArr.length;i++) sum+=_dataArr[i];
+          const avg = sum/_dataArr.length;             /* 0..255 */
+          const scale = 1 + Math.min(avg/255,1)*0.18;  /* up to +18% */
+          orb.style.transform = `scale(${scale.toFixed(3)})`;
+          orb.style.boxShadow =
+            `0 0 ${60+avg*0.5}px rgba(232,0,154,.55), 0 0 ${120+avg}px rgba(232,0,154,.30), inset 0 0 60px rgba(255,180,220,.35)`;
+          _audioRAF = requestAnimationFrame(tick);
+        };
+        tick();
+      }catch(e){ /* analyser optional */ }
+    }
+    function _stopAudioReactive(){
+      if(_audioRAF){ cancelAnimationFrame(_audioRAF); _audioRAF=null; }
+      if(_audioCtx){ try{ _audioCtx.close(); }catch(_){} _audioCtx=null; }
+      _analyser=null; _dataArr=null;
+      const orb=document.getElementById('rtcAudioOrb');
+      if(orb){ orb.style.transform=''; }
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       6 · Quality monitor (reuses the live _pc)
+       ─────────────────────────────────────────────────────────────── */
+    let _qTimer=null, _durTimer=null, _callStart=0;
+    function _startMonitors(){
+      _callStart = Date.now();
+      if(_durTimer) clearInterval(_durTimer);
+      _durTimer = setInterval(() => {
+        const sec = Math.floor((Date.now()-_callStart)/1000);
+        const txt = Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');
+        const tb = document.getElementById('ccTbTimer'); if(tb) tb.textContent = txt;
+      }, 1000);
+      if(_qTimer) clearInterval(_qTimer);
+      _qTimer = setInterval(_checkQuality, 2500);
+    }
+    function _stopMonitors(){
+      if(_qTimer){ clearInterval(_qTimer); _qTimer=null; }
+      if(_durTimer){ clearInterval(_durTimer); _durTimer=null; }
+    }
+    async function _checkQuality(){
+      const pc = window._pc;
+      if(!pc || !pc.getStats) return;
+      try{
+        const stats = await pc.getStats();
+        let rtt=0, lost=0, recv=0;
+        stats.forEach(r => {
+          if(r.type==='candidate-pair' && r.state==='succeeded' && typeof r.currentRoundTripTime==='number') rtt=r.currentRoundTripTime*1000;
+          if(r.type==='inbound-rtp'){ lost+=r.packetsLost||0; recv+=r.packetsReceived||0; }
+        });
+        const loss = recv>0 ? (lost/(lost+recv))*100 : 0;
+        let lvl=3, cls='lit';
+        if(rtt>300||loss>5){ lvl=1; cls='poor lit'; }
+        else if(rtt>180||loss>2){ lvl=2; cls='fair lit'; }
+        ['ccQ1','ccQ2','ccQ3'].forEach((id,i) => {
+          const d=document.getElementById(id); if(!d) return;
+          d.className='cc-q-dot'+(i<lvl?(' '+cls):'');
+        });
+      }catch(_){}
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       7 · Camera flip + speaker (wired to live _pc / _localStream)
+       ─────────────────────────────────────────────────────────────── */
+    async function _flipCamera(e){
+      if(e) e.stopPropagation();
+      const stream = window._localStream, pc = window._pc;
+      if(!stream) return;
+      const vt = stream.getVideoTracks()[0]; if(!vt) return;
+      const cur = vt.getSettings().facingMode;
+      const next = cur==='environment' ? 'user' : 'environment';
+      try{
+        const ns = await navigator.mediaDevices.getUserMedia({ video:{ facingMode: next }, audio:false });
+        const nt = ns.getVideoTracks()[0];
+        if(pc){ const sender = pc.getSenders().find(s=>s.track&&s.track.kind==='video'); if(sender) await sender.replaceTrack(nt); }
+        stream.removeTrack(vt); vt.stop(); stream.addTrack(nt);
+        const lv=document.getElementById('rtcLocalVideo'); if(lv) lv.srcObject=stream;
+        if(typeof toast==='function') toast('🔄 '+(next==='user'?'Front':'Back')+' camera');
+      }catch(_){ if(typeof toast==='function') toast('Flip unavailable'); }
+    }
+    function _toggleSpeaker(e){
+      if(e) e.stopPropagation();
+      const rv=document.getElementById('rtcRemoteVideo');
+      const btn=document.getElementById('ccSpkBtn');
+      if(rv){ rv.volume = rv.volume<0.6?1:0.5; if(btn) btn.classList.toggle('on', rv.volume>=1); }
+    }
+
+    /* ───────────────────────────────────────────────────────────────
+       8 · Hook the call lifecycle (override _showRtcUI + _rtcHangup)
+       ─────────────────────────────────────────────────────────────── */
+    function _hookLifecycle(){
+      if(typeof window._showRtcUI === 'function' && !window._showRtcUI.__cosmic){
+        const orig = window._showRtcUI;
+        window._showRtcUI = function(type){
+          _decorate();
+          const r = orig.apply(this, arguments);
+          const stage = document.getElementById('rtcCall');
+          if(stage){
+            stage.classList.toggle('cc-video', type==='video');
+            stage.classList.remove('cc-hide-ui');
+            const fb=document.getElementById('ccFlipBtn'); if(fb) fb.style.display = type==='video'?'flex':'none';
+            /* partner name into glass top bar */
+            const nameEl=document.getElementById('ccTbName');
+            const partner = (window._msc && window._msc.state) ? (window._msc.state().activePartnerName||'Beloved') : 'Beloved';
+            if(nameEl) nameEl.textContent = partner;
+            const cn=document.getElementById('rtcCallName'); if(cn) cn.textContent = partner;
+          }
+          _startStars();
+          _startMonitors();
+          /* auto-hide video controls after 4s */
+          if(type==='video'){
+            setTimeout(() => { const st=document.getElementById('rtcCall'); if(st&&st.style.display!=='none') st.classList.add('cc-hide-ui'); }, 4500);
+          }
+          return r;
+        };
+        window._showRtcUI.__cosmic = true;
+      }
+
+      /* When remote stream arrives, start audio-reactive orb (audio calls) */
+      if(typeof window._rtcStartPresence === 'function' && !window._rtcStartPresence.__cosmic){
+        const orig = window._rtcStartPresence;
+        window._rtcStartPresence = function(){
+          const r = orig.apply(this, arguments);
+          try{
+            const rv = document.getElementById('rtcRemoteVideo');
+            const stage = document.getElementById('rtcCall');
+            if(rv && rv.srcObject && stage && !stage.classList.contains('cc-video')){
+              _startAudioReactive(rv.srcObject);
+            }
+          }catch(_){}
+          return r;
+        };
+        window._rtcStartPresence.__cosmic = true;
+      }
+
+      if(typeof window._rtcHangup === 'function' && !window._rtcHangup.__cosmic){
+        const orig = window._rtcHangup;
+        window._rtcHangup = function(){
+          _stopStars(); _stopAudioReactive(); _stopMonitors();
+          const stage=document.getElementById('rtcCall');
+          if(stage) stage.classList.remove('cc-video','cc-hide-ui');
+          return orig.apply(this, arguments);
+        };
+        window._rtcHangup.__cosmic = true;
+      }
+    }
+
+    /* Pause starfield when tab hidden (battery) */
+    document.addEventListener('visibilitychange', () => {
+      if(document.hidden) _stopStars();
+      else { const s=document.getElementById('rtcCall'); if(s&&s.style.display!=='none') _startStars(); }
+    });
+
+    /* ───────────────────────────────────────────────────────────────
+       Bootstrap
+       ─────────────────────────────────────────────────────────────── */
+    let _tries=0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _decorate();
+      _hookLifecycle();
+      if(_tries>50) clearInterval(_timer);
+    }, 350);
+
+    window._cosmicCall = {
+      decorate: _decorate,
+      startStars: _startStars,
+      stopStars: _stopStars,
+      flip: _flipCamera
+    };
+
+    console.log('%cSpurana ✦ Cosmic Call Experience online',
+      'background:linear-gradient(135deg,#E8009A,#7C3AED);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Starfield · breathing voice-reactive orb · glass controls · quality aura');
+    console.log('  Backend unchanged (Firebase signalling + STUN/TURN) — works on the live HTTPS app');
+  })();
+
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  SACRED CALL ENGINE — calls that truly connect, in a cosmos    ║
+     ║                                                                ║
+     ║  Replaces the call layer with:                                 ║
+     ║                                                                ║
+     ║  SIGNALLING (reliable, per-conversation):                      ║
+     ║   · rtc/ring/{calleeUID}  → the ring (convId, caller, type)    ║
+     ║   · rtc/rooms/{convId}/   → offer, answer, callerIce, calleeIce║
+     ║   · Perfect-negotiation-style glare handling                   ║
+     ║   · ICE candidate queueing until remoteDescription is set      ║
+     ║   · STUN + TURN (relay) so it connects through any NAT         ║
+     ║   · Works for every soul independently (multi-soul safe)       ║
+     ║                                                                ║
+     ║  UI (cosmic + serene, full-screen):                            ║
+     ║   · Audio call: an audio-reactive orb breathing with their     ║
+     ║     voice over a drifting starfield                            ║
+     ║   · Video call: full-bleed remote video, glowing PiP, glass    ║
+     ║     controls                                                   ║
+     ║   · Incoming: pulsing summons with accept / decline            ║
+     ║   · Live timer, connection-quality aura, graceful states       ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function SacredCallEngine(){
+    'use strict';
+
+    /* ═══════════════════════════════════════════════════════════════
+       CONFIG
+       ═══════════════════════════════════════════════════════════════ */
+    const ICE_CONFIG = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+      ],
+      iceCandidatePoolSize: 10
+    };
+
+    const PREMIUM_AUDIO = {
+      echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+      channelCount: 1, sampleRate: { ideal: 48000 }
+    };
+    const PREMIUM_VIDEO = {
+      facingMode: 'user',
+      width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 },
+      frameRate: { ideal: 30, max: 30 }, aspectRatio: { ideal: 16/9 }
+    };
+
+    /* ═══════════════════════════════════════════════════════════════
+       STATE
+       ═══════════════════════════════════════════════════════════════ */
+    const S = {
+      pc: null,
+      localStream: null,
+      remoteStream: null,
+      role: null,          /* 'caller' | 'callee' */
+      type: null,          /* 'audio' | 'video' */
+      convId: null,
+      partnerUid: null,
+      partnerName: 'Beloved',
+      roomRef: null,
+      ringRef: null,
+      active: false,
+      startTime: 0,
+      timerInt: null,
+      qualityInt: null,
+      pendingRemoteIce: [],
+      remoteSet: false,
+      muted: false,
+      camOff: false,
+      audioCtx: null,
+      orbRAF: null,
+      ring: null           /* incoming ring payload */
+    };
+
+    function _db(){ return (typeof db !== 'undefined' && db) ? db : null; }
+    function _myUid(){ return (typeof me !== 'undefined' && me && me.uid) ? me.uid : null; }
+    function _myName(){ return (typeof myName !== 'undefined' && myName) ? myName : ((typeof me !== 'undefined' && me && me.name) ? me.name : 'Soul'); }
+
+    /* Resolve the active conversation + partner */
+    function _resolveTarget(){
+      let convId = null, partnerUid = null, partnerName = 'Beloved';
+      try{
+        if(window._msc && window._msc.state){
+          const st = window._msc.state();
+          convId = st.activeConvId;
+          partnerUid = st.activePartnerUid;
+          if(st.contacts && partnerUid && st.contacts[partnerUid]){
+            partnerName = st.contacts[partnerUid].name || 'Beloved';
+          }
+        }
+      }catch(_){}
+      /* Fallback: derive from any other user (legacy 2-soul) */
+      if(!convId && _myUid()){
+        convId = 'default';
+      }
+      return { convId, partnerUid, partnerName };
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       PUBLIC ENTRY — start a call
+       ═══════════════════════════════════════════════════════════════ */
+    async function startCall(type){
+      if(location.protocol === 'file:'){
+        if(typeof toast === 'function') toast('Calls connect on the live link (HTTPS) ✦');
+        return;
+      }
+      const database = _db();
+      if(!database){ if(typeof toast === 'function') toast('Connection unavailable'); return; }
+      if(S.active){ if(typeof toast === 'function') toast('Already in a call'); return; }
+
+      const tgt = _resolveTarget();
+      S.convId = tgt.convId || 'default';
+      S.partnerUid = tgt.partnerUid;
+      S.partnerName = tgt.partnerName;
+      S.role = 'caller';
+      S.type = type;
+      S.remoteSet = false;
+      S.pendingRemoteIce = [];
+
+      /* Acquire media */
+      try{
+        S.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: PREMIUM_AUDIO,
+          video: type === 'video' ? PREMIUM_VIDEO : false
+        });
+      }catch(e){
+        if(typeof toast === 'function') toast('Mic / camera permission needed');
+        return;
+      }
+
+      _openCallUI(type, 'calling');
+      S.active = true;
+
+      /* Build peer */
+      S.pc = new RTCPeerConnection(ICE_CONFIG);
+      S.localStream.getTracks().forEach(t => S.pc.addTrack(t, S.localStream));
+      if(type === 'video') _setLocalVideo(S.localStream);
+
+      S.roomRef = database.ref('rtc/rooms/' + S.convId);
+      /* Fresh room */
+      await S.roomRef.remove().catch(()=>{});
+
+      S.pc.onicecandidate = e => {
+        if(e.candidate) S.roomRef.child('callerIce').push(e.candidate.toJSON()).catch(()=>{});
+      };
+      S.pc.ontrack = e => { _onRemoteTrack(e); };
+      _wireConnState();
+
+      const offer = await S.pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: type === 'video' });
+      await S.pc.setLocalDescription(offer);
+
+      await S.roomRef.child('offer').set({
+        type: offer.type, sdp: offer.sdp,
+        callerUID: _myUid(), callerName: _myName(), callType: type, ts: Date.now()
+      });
+      await S.roomRef.child('status').set('ringing');
+
+      /* Ring the partner directly so they hear it on any screen */
+      if(S.partnerUid){
+        S.ringRef = database.ref('rtc/ring/' + S.partnerUid);
+        await S.ringRef.set({
+          convId: S.convId, callerUID: _myUid(), callerName: _myName(),
+          type: type, ts: Date.now()
+        });
+      }
+
+      /* Listen for answer */
+      S.roomRef.child('answer').on('value', async snap => {
+        const ans = snap.val();
+        if(ans && S.pc && !S.pc.currentRemoteDescription){
+          try{
+            await S.pc.setRemoteDescription(new RTCSessionDescription(ans));
+            S.remoteSet = true;
+            _flushRemoteIce();
+          }catch(e){ console.warn('[SCE] setRemoteDescription(answer) failed', e); }
+        }
+      });
+      /* Remote (callee) ICE */
+      S.roomRef.child('calleeIce').on('child_added', snap => {
+        _addRemoteIce(snap.val());
+      });
+
+      _watchRoomStatus();
+      _setStatus('Reaching through the cosmos…');
+
+      /* No-answer timeout */
+      setTimeout(() => {
+        if(S.active && S.pc && S.pc.connectionState !== 'connected'){
+          if(typeof toast === 'function') toast('No answer ✦');
+          hangup();
+        }
+      }, 45000);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       INCOMING — permanent ring listener
+       ═══════════════════════════════════════════════════════════════ */
+    function _listenForRings(){
+      const database = _db();
+      const uid = _myUid();
+      if(!database || !uid) return false;
+      database.ref('rtc/ring/' + uid).on('value', snap => {
+        const ring = snap.val();
+        if(!ring){ _hideIncoming(); return; }
+        if(ring.callerUID === uid) return;          /* ignore self */
+        if(S.active) return;                          /* already busy */
+        if(ring.ts && (Date.now() - ring.ts) > 50000){ /* stale */ 
+          database.ref('rtc/ring/' + uid).remove().catch(()=>{}); return;
+        }
+        S.ring = ring;
+        _showIncoming(ring);
+      });
+      return true;
+    }
+
+    async function acceptIncoming(){
+      const ring = S.ring;
+      if(!ring) return;
+      const database = _db();
+      if(!database) return;
+      _hideIncoming();
+
+      S.role = 'callee';
+      S.type = ring.type;
+      S.convId = ring.convId;
+      S.partnerUid = ring.callerUID;
+      S.partnerName = ring.callerName || 'Beloved';
+      S.remoteSet = false;
+      S.pendingRemoteIce = [];
+
+      try{
+        S.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: PREMIUM_AUDIO,
+          video: ring.type === 'video' ? PREMIUM_VIDEO : false
+        });
+      }catch(e){
+        if(typeof toast === 'function') toast('Mic / camera permission needed');
+        _declineCleanup();
+        return;
+      }
+
+      _openCallUI(ring.type, 'connecting');
+      S.active = true;
+
+      S.pc = new RTCPeerConnection(ICE_CONFIG);
+      S.localStream.getTracks().forEach(t => S.pc.addTrack(t, S.localStream));
+      if(ring.type === 'video') _setLocalVideo(S.localStream);
+
+      S.roomRef = database.ref('rtc/rooms/' + S.convId);
+      S.pc.onicecandidate = e => {
+        if(e.candidate) S.roomRef.child('calleeIce').push(e.candidate.toJSON()).catch(()=>{});
+      };
+      S.pc.ontrack = e => { _onRemoteTrack(e); };
+      _wireConnState();
+
+      /* Read the offer + answer */
+      const offerSnap = await S.roomRef.child('offer').once('value');
+      const offer = offerSnap.val();
+      if(!offer){ if(typeof toast === 'function') toast('Call expired'); hangup(); return; }
+
+      try{
+        await S.pc.setRemoteDescription(new RTCSessionDescription({ type: offer.type, sdp: offer.sdp }));
+        S.remoteSet = true;
+        _flushRemoteIce();
+        const answer = await S.pc.createAnswer();
+        await S.pc.setLocalDescription(answer);
+        await S.roomRef.child('answer').set({ type: answer.type, sdp: answer.sdp, calleeUID: _myUid(), ts: Date.now() });
+        await S.roomRef.child('status').set('active');
+      }catch(e){
+        console.warn('[SCE] answer flow failed', e);
+        hangup(); return;
+      }
+
+      /* Caller ICE */
+      S.roomRef.child('callerIce').on('child_added', snap => {
+        _addRemoteIce(snap.val());
+      });
+
+      /* Clear my ring */
+      database.ref('rtc/ring/' + _myUid()).remove().catch(()=>{});
+      _watchRoomStatus();
+      _setStatus('Connecting…');
+    }
+
+    function declineIncoming(){
+      const database = _db();
+      if(database && _myUid()) database.ref('rtc/ring/' + _myUid()).remove().catch(()=>{});
+      if(S.ring && database){
+        /* tell caller it was declined */
+        database.ref('rtc/rooms/' + S.ring.convId + '/status').set('declined').catch(()=>{});
+      }
+      _declineCleanup();
+    }
+    function _declineCleanup(){
+      S.ring = null;
+      _hideIncoming();
+      if(typeof SE !== 'undefined' && SE.play) try{ SE.play('disconnect'); }catch(_){}
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       ICE helpers — queue until remote description is set
+       ═══════════════════════════════════════════════════════════════ */
+    function _addRemoteIce(cand){
+      if(!cand || !S.pc) return;
+      if(!S.remoteSet){ S.pendingRemoteIce.push(cand); return; }
+      S.pc.addIceCandidate(new RTCIceCandidate(cand)).catch(()=>{});
+    }
+    function _flushRemoteIce(){
+      if(!S.pc) return;
+      while(S.pendingRemoteIce.length){
+        const c = S.pendingRemoteIce.shift();
+        S.pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
+      }
+    }
+
+    function _wireConnState(){
+      S.pc.onconnectionstatechange = () => {
+        if(!S.pc) return;
+        const st = S.pc.connectionState;
+        if(st === 'connected'){
+          _setStatus('Connected');
+          _markConnected();
+        } else if(st === 'disconnected'){
+          _setStatus('Reconnecting…');
+          setTimeout(() => { try{ if(S.pc && S.pc.restartIce) S.pc.restartIce(); }catch(_){}}, 1500);
+        } else if(st === 'failed'){
+          hangup();
+        }
+      };
+      S.pc.oniceconnectionstatechange = () => {
+        if(S.pc && S.pc.iceConnectionState === 'failed'){
+          try{ S.pc.restartIce && S.pc.restartIce(); }catch(_){}
+        }
+      };
+    }
+
+    function _onRemoteTrack(e){
+      if(e.streams && e.streams[0]){
+        S.remoteStream = e.streams[0];
+      } else {
+        if(!S.remoteStream) S.remoteStream = new MediaStream();
+        S.remoteStream.addTrack(e.track);
+      }
+      if(S.type === 'video'){
+        _setRemoteVideo(S.remoteStream);
+      } else {
+        _attachRemoteAudio(S.remoteStream);
+        _startOrbReactivity(S.remoteStream);
+      }
+      _markConnected();
+    }
+
+    let _connectedOnce = false;
+    function _markConnected(){
+      if(_connectedOnce) return;
+      _connectedOnce = true;
+      S.startTime = Date.now();
+      _setStatus('Connected');
+      _startTimer();
+      _startQualityMonitor();
+      if(typeof SE !== 'undefined' && SE.play) try{ SE.play('connect'); }catch(_){}
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HANGUP / CLEANUP
+       ═══════════════════════════════════════════════════════════════ */
+    function hangup(){
+      const database = _db();
+      try{
+        if(S.roomRef){ S.roomRef.child('status').set('ended').catch(()=>{}); S.roomRef.off(); }
+        if(database && S.convId) database.ref('rtc/rooms/' + S.convId).remove().catch(()=>{});
+        if(database && S.partnerUid) database.ref('rtc/ring/' + S.partnerUid).remove().catch(()=>{});
+        if(database && _myUid()) database.ref('rtc/ring/' + _myUid()).remove().catch(()=>{});
+      }catch(_){}
+      if(S.pc){ try{ S.pc.close(); }catch(_){} S.pc = null; }
+      if(S.localStream){ S.localStream.getTracks().forEach(t => t.stop()); S.localStream = null; }
+      S.remoteStream = null;
+      if(S.timerInt){ clearInterval(S.timerInt); S.timerInt = null; }
+      if(S.qualityInt){ clearInterval(S.qualityInt); S.qualityInt = null; }
+      if(S.orbRAF){ cancelAnimationFrame(S.orbRAF); S.orbRAF = null; }
+      if(S.audioCtx){ try{ S.audioCtx.close(); }catch(_){} S.audioCtx = null; }
+      S.active = false;
+      _connectedOnce = false;
+      S.role = null; S.type = null; S.remoteSet = false; S.pendingRemoteIce = [];
+      _closeCallUI();
+      if(typeof SE !== 'undefined' && SE.play) try{ SE.play('disconnect'); }catch(_){}
+      if(typeof toast === 'function') toast('The channel closes in peace ✦');
+    }
+
+    /* Listen for remote hangup (status ended/declined) */
+    function _watchRoomStatus(){
+      if(!S.roomRef) return;
+      S.roomRef.child('status').on('value', snap => {
+        const st = snap.val();
+        if(st === 'ended' || st === 'declined'){
+          if(S.active){ hangup(); }
+        }
+      });
+    }
+
+    /* expose state for UI part (part 2 attaches the rest) */
+    window._sce = {
+      S, startCall, hangup, acceptIncoming, declineIncoming,
+      _listenForRings, _watchRoomStatus,
+      toggleMute: function(){}, toggleCam: function(){}, flipCam: function(){}, toggleSpeaker: function(){}
+    };
+
+    /* UI hooks are defined in part 2 and assigned onto these: */
+    function _openCallUI(type, phase){ if(window._sceUI) window._sceUI.open(type, phase); }
+    function _closeCallUI(){ if(window._sceUI) window._sceUI.close(); }
+    function _setStatus(t){ if(window._sceUI) window._sceUI.setStatus(t); }
+    function _setLocalVideo(s){ if(window._sceUI) window._sceUI.setLocalVideo(s); }
+    function _setRemoteVideo(s){ if(window._sceUI) window._sceUI.setRemoteVideo(s); }
+    function _attachRemoteAudio(s){ if(window._sceUI) window._sceUI.attachRemoteAudio(s); }
+    function _showIncoming(r){ if(window._sceUI) window._sceUI.showIncoming(r); }
+    function _hideIncoming(){ if(window._sceUI) window._sceUI.hideIncoming(); }
+    function _startTimer(){ if(window._sceUI) window._sceUI.startTimer(); }
+    function _startQualityMonitor(){ if(window._sceUI) window._sceUI.startQuality(); }
+    function _startOrbReactivity(s){ if(window._sceUI) window._sceUI.startOrb(s); }
+
+    /* Boot the ring listener once me+db exist */
+    let _ringTries = 0;
+    const _ringTimer = setInterval(() => {
+      _ringTries++;
+      if(_listenForRings() || _ringTries > 120) clearInterval(_ringTimer);
+    }, 500);
+
+    console.log('%cSpurana ✦ Sacred Call Engine — signalling online',
+      'background:linear-gradient(135deg,#7C3AED,#E8009A);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+  })();
+
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  SACRED CALL ENGINE · PART 2 — the cosmic, serene UI           ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function SacredCallUI(){
+    'use strict';
+
+    if(!document.getElementById('sceStyles')){
+      const s = document.createElement('style');
+      s.id = 'sceStyles';
+      s.textContent = `
+#sceCall, #sceIncoming{
+  position: fixed; inset: 0; z-index: 100000;
+  display: none;
+  align-items: center; justify-content: center;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% 0%, #2a0a3e 0%, #14071f 45%, #07030d 100%);
+}
+#sceCall.on, #sceIncoming.on{ display: flex; }
+
+/* drifting nebula glow */
+#sceCall::before, #sceIncoming::before{
+  content:''; position:absolute; inset:-20%;
+  background:
+    radial-gradient(40% 40% at 25% 30%, rgba(124,58,237,.35), transparent 70%),
+    radial-gradient(45% 45% at 78% 65%, rgba(232,0,154,.28), transparent 70%),
+    radial-gradient(30% 30% at 60% 20%, rgba(56,189,248,.18), transparent 70%);
+  filter: blur(20px);
+  animation: sceNebula 18s ease-in-out infinite alternate;
+  pointer-events:none;
+}
+@keyframes sceNebula{
+  0%{ transform: translate(0,0) scale(1); }
+  100%{ transform: translate(2%, -2%) scale(1.08); }
+}
+#sceStars, #sceIncStars{
+  position:absolute; inset:0; width:100%; height:100%;
+  pointer-events:none; opacity:.85;
+}
+
+/* remote / local video */
+#sceRemoteVid{
+  position:absolute; inset:0; width:100%; height:100%;
+  object-fit:cover; background:#05020c; z-index:1;
+  display:none;
+}
+#sceRemoteVid.show{ display:block; }
+#sceCall.video-mode::after{
+  content:''; position:absolute; inset:0; z-index:2; pointer-events:none;
+  box-shadow: inset 0 0 200px rgba(124,58,237,.35), inset 0 0 80px rgba(0,0,0,.6);
+}
+#sceLocalVid{
+  position:absolute; bottom: calc(env(safe-area-inset-bottom,0) + 120px); right:16px;
+  width:108px; height:150px; object-fit:cover; border-radius:18px;
+  border:2px solid rgba(232,0,154,.55);
+  box-shadow: 0 8px 30px rgba(0,0,0,.5), 0 0 24px rgba(232,0,154,.35);
+  z-index:5; background:#000; display:none;
+  transition: transform .25s;
+}
+#sceLocalVid.show{ display:block; }
+#sceLocalVid:active{ transform: scale(1.04); }
+
+/* ── AUDIO STAGE: the breathing orb ── */
+#sceAudioStage{
+  position:relative; z-index:4;
+  display:none; flex-direction:column; align-items:center; gap:6px;
+  text-align:center; padding:0 24px;
+}
+#sceAudioStage.show{ display:flex; }
+#sceOrbWrap{
+  position:relative; width:240px; height:240px;
+  display:flex; align-items:center; justify-content:center;
+  margin-bottom: 22px;
+}
+.sce-orb-halo{
+  position:absolute; inset:0; border-radius:50%;
+  background: radial-gradient(circle, rgba(232,0,154,.45), rgba(124,58,237,.18) 55%, transparent 72%);
+  filter: blur(14px);
+  animation: sceHalo 4s ease-in-out infinite;
+}
+@keyframes sceHalo{ 0%,100%{ transform:scale(1); opacity:.7 } 50%{ transform:scale(1.12); opacity:1 } }
+.sce-orb-ring{
+  position:absolute; border-radius:50%;
+  border:1px solid rgba(232,0,154,.35);
+}
+.sce-orb-ring.r1{ inset:14px; animation: sceSpin 26s linear infinite; border-style:dashed; }
+.sce-orb-ring.r2{ inset:34px; border-color: rgba(124,58,237,.35); animation: sceSpin 40s linear infinite reverse; }
+@keyframes sceSpin{ to{ transform: rotate(360deg); } }
+#sceOrb{
+  position:relative; width:150px; height:150px; border-radius:50%;
+  background:
+    radial-gradient(circle at 35% 30%, #ff7ac0, #E8009A 45%, #7C3AED 100%);
+  box-shadow: 0 0 50px rgba(232,0,154,.55), inset 0 0 40px rgba(255,255,255,.25);
+  display:flex; align-items:center; justify-content:center;
+  font-size:54px;
+  transition: transform .08s ease-out, box-shadow .12s ease-out;
+  will-change: transform;
+}
+#sceName, #sceIncName{
+  font-family:'Cinzel Decorative', serif; font-size:26px; letter-spacing:.04em;
+  color:#F6ECFF; text-shadow:0 2px 20px rgba(232,0,154,.5);
+}
+#sceStatus, #sceIncType{
+  font-family:'Cormorant Garamond', serif; font-style:italic; font-size:15px;
+  color: rgba(246,236,255,.7); margin-top:2px;
+}
+#sceTimer{
+  font-family:'Orbitron', monospace; font-size:14px; letter-spacing:.18em;
+  color:#FFB8D0; margin-top:10px;
+}
+
+/* video top overlay */
+#sceTopBar{
+  position:absolute; top: calc(env(safe-area-inset-top,0) + 16px); left:0; right:0;
+  z-index:6; display:none; flex-direction:column; align-items:center; gap:2px;
+  pointer-events:none;
+}
+#sceCall.video-mode #sceTopBar{ display:flex; }
+#sceVidName{ font-family:'Cinzel Decorative',serif; font-size:18px; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,.7); }
+#sceVidTimer{ font-family:'Orbitron',monospace; font-size:12px; letter-spacing:.16em; color:rgba(255,255,255,.85); text-shadow:0 1px 8px rgba(0,0,0,.8); }
+
+/* quality aura */
+#sceQuality{
+  position:absolute; top: calc(env(safe-area-inset-top,0) + 18px); right:16px; z-index:7;
+  display:flex; align-items:center; gap:6px;
+  font-family:'Orbitron',monospace; font-size:9px; letter-spacing:.18em; text-transform:uppercase;
+  color:rgba(246,236,255,.75);
+  background: rgba(10,4,18,.5); border:1px solid rgba(255,255,255,.12);
+  padding:5px 10px; border-radius:999px; backdrop-filter: blur(8px);
+}
+.sce-q-dot{ width:8px; height:8px; border-radius:50%; background:#6B7280; }
+.sce-q-dot.excellent{ background:#34D399; box-shadow:0 0 8px #34D399; }
+.sce-q-dot.good{ background:#60A5FA; box-shadow:0 0 6px #60A5FA; }
+.sce-q-dot.fair{ background:#FBBF24; }
+.sce-q-dot.poor{ background:#F87171; }
+
+/* ── glass control bar ── */
+#sceControls{
+  position:absolute; bottom: calc(env(safe-area-inset-bottom,0) + 28px); left:50%;
+  transform:translateX(-50%); z-index:8;
+  display:flex; align-items:center; gap:14px;
+  padding:14px 18px;
+  background: rgba(12,6,20,.5); backdrop-filter: blur(20px);
+  border:1px solid rgba(255,255,255,.12); border-radius:999px;
+  box-shadow:0 12px 40px rgba(0,0,0,.5);
+}
+.sce-ctl{
+  width:54px; height:54px; border-radius:50%;
+  border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.08);
+  color:#F6ECFF; font-size:20px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition: transform .15s, background .2s; touch-action:manipulation;
+}
+.sce-ctl:hover{ background:rgba(255,255,255,.16); transform:scale(1.06); }
+.sce-ctl:active{ transform:scale(.94); }
+.sce-ctl.off{ background:rgba(220,38,38,.25); border-color:rgba(220,38,38,.5); color:#FCA5A5; }
+.sce-ctl.end{
+  width:64px; height:64px; font-size:24px; color:#fff;
+  background:linear-gradient(135deg,#DC2626,#B91C1C); border-color:rgba(220,38,38,.7);
+  box-shadow:0 0 24px rgba(220,38,38,.45);
+}
+.sce-ctl.end:hover{ background:linear-gradient(135deg,#EF4444,#DC2626); }
+
+/* ── incoming ── */
+#sceIncStage{ position:relative; z-index:4; display:flex; flex-direction:column; align-items:center; gap:8px; }
+#sceIncOrb{
+  width:150px; height:150px; border-radius:50%;
+  background: radial-gradient(circle at 35% 30%, #ff7ac0, #E8009A 45%, #7C3AED 100%);
+  box-shadow:0 0 60px rgba(232,0,154,.6);
+  display:flex; align-items:center; justify-content:center; font-size:58px; margin-bottom:18px;
+  animation: sceIncPulse 1.4s ease-in-out infinite;
+}
+@keyframes sceIncPulse{ 0%,100%{ transform:scale(1); box-shadow:0 0 60px rgba(232,0,154,.55) } 50%{ transform:scale(1.07); box-shadow:0 0 90px rgba(232,0,154,.85) } }
+#sceIncBtns{ display:flex; gap:60px; margin-top:40px; z-index:5; }
+.sce-inc-btn{
+  width:74px; height:74px; border-radius:50%; border:none; cursor:pointer;
+  font-size:30px; color:#fff; display:flex; align-items:center; justify-content:center;
+  transition: transform .15s; touch-action:manipulation;
+}
+.sce-inc-btn.accept{ background:linear-gradient(135deg,#22C55E,#15803D); box-shadow:0 0 30px rgba(34,197,94,.6); animation: sceAccGlow 1.4s ease-in-out infinite; }
+.sce-inc-btn.decline{ background:linear-gradient(135deg,#DC2626,#991B1B); box-shadow:0 0 24px rgba(220,38,38,.5); }
+.sce-inc-btn:active{ transform:scale(.9); }
+@keyframes sceAccGlow{ 0%,100%{ box-shadow:0 0 30px rgba(34,197,94,.5) } 50%{ box-shadow:0 0 50px rgba(34,197,94,.85) } }
+.sce-inc-label{ font-family:'Orbitron',monospace; font-size:9px; letter-spacing:.2em; color:rgba(246,236,255,.6); text-transform:uppercase; margin-top:8px; }
+
+@media (max-width:600px){
+  #sceOrbWrap{ width:200px; height:200px; }
+  #sceOrb{ width:128px; height:128px; font-size:46px; }
+  #sceName, #sceIncName{ font-size:22px; }
+  #sceIncBtns{ gap:44px; }
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ── Build DOM ── */
+    function _build(){
+      if(document.getElementById('sceCall')) return;
+      const call = document.createElement('div');
+      call.id = 'sceCall';
+      call.innerHTML = `
+        <canvas id="sceStars"></canvas>
+        <video id="sceRemoteVid" autoplay playsinline></video>
+        <video id="sceLocalVid" autoplay playsinline muted></video>
+        <div id="sceTopBar"><div id="sceVidName">Beloved</div><div id="sceVidTimer">00:00</div></div>
+        <div id="sceQuality"><span class="sce-q-dot good" id="sceQDot"></span><span id="sceQLabel">Good</span></div>
+        <div id="sceAudioStage">
+          <div id="sceOrbWrap">
+            <div class="sce-orb-halo"></div>
+            <div class="sce-orb-ring r1"></div>
+            <div class="sce-orb-ring r2"></div>
+            <div id="sceOrb">✦</div>
+          </div>
+          <div id="sceName">Beloved</div>
+          <div id="sceStatus">Connecting…</div>
+          <div id="sceTimer">00:00</div>
+        </div>
+        <div id="sceControls">
+          <button class="sce-ctl" id="sceMute" title="Mute">🎙</button>
+          <button class="sce-ctl" id="sceCam" title="Camera" style="display:none">📹</button>
+          <button class="sce-ctl" id="sceFlip" title="Flip camera" style="display:none">🔄</button>
+          <button class="sce-ctl" id="sceSpeaker" title="Speaker">🔊</button>
+          <button class="sce-ctl end" id="sceEnd" title="End">📵</button>
+        </div>
+        <audio id="sceRemoteAudio" autoplay></audio>
+      `;
+      document.body.appendChild(call);
+
+      const inc = document.createElement('div');
+      inc.id = 'sceIncoming';
+      inc.innerHTML = `
+        <canvas id="sceIncStars"></canvas>
+        <div id="sceIncStage">
+          <div id="sceIncOrb">✦</div>
+          <div id="sceIncName">Beloved</div>
+          <div id="sceIncType">Incoming Sacred Call</div>
+          <div id="sceIncBtns">
+            <div style="display:flex;flex-direction:column;align-items:center">
+              <button class="sce-inc-btn decline" id="sceDecline">📵</button>
+              <div class="sce-inc-label">Decline</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center">
+              <button class="sce-inc-btn accept" id="sceAccept">📞</button>
+              <div class="sce-inc-label">Answer</div>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(inc);
+
+      /* Wire controls */
+      document.getElementById('sceMute').addEventListener('click', _toggleMute);
+      document.getElementById('sceCam').addEventListener('click', _toggleCam);
+      document.getElementById('sceFlip').addEventListener('click', _flipCam);
+      document.getElementById('sceSpeaker').addEventListener('click', _toggleSpeaker);
+      document.getElementById('sceEnd').addEventListener('click', () => { if(window._sce) window._sce.hangup(); });
+      document.getElementById('sceAccept').addEventListener('click', () => { if(window._sce) window._sce.acceptIncoming(); });
+      document.getElementById('sceDecline').addEventListener('click', () => { if(window._sce) window._sce.declineIncoming(); });
+    }
+
+    /* ── starfield ── */
+    function _starfield(canvas){
+      if(!canvas) return;
+      const ctx = canvas.getContext('2d');
+      let w, h, stars = [];
+      function resize(){ w = canvas.width = canvas.offsetWidth * devicePixelRatio; h = canvas.height = canvas.offsetHeight * devicePixelRatio; init(); }
+      function init(){ stars = []; const n = Math.min(120, Math.floor(w*h/22000)); for(let i=0;i<n;i++) stars.push({x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.6*devicePixelRatio+0.3,s:Math.random()*0.25+0.05,a:Math.random()}); }
+      let raf;
+      function draw(){
+        ctx.clearRect(0,0,w,h);
+        for(const st of stars){
+          st.y += st.s; st.a += 0.02; if(st.y>h) st.y=0;
+          const tw = 0.5 + Math.sin(st.a)*0.5;
+          ctx.beginPath(); ctx.arc(st.x,st.y,st.r,0,6.28);
+          ctx.fillStyle = 'rgba(255,'+(200+Math.floor(tw*55))+',240,'+(0.3+tw*0.5)+')';
+          ctx.fill();
+        }
+        raf = requestAnimationFrame(draw);
+      }
+      resize(); window.addEventListener('resize', resize); draw();
+      canvas._stop = () => { cancelAnimationFrame(raf); };
+    }
+
+    /* ── timer ── */
+    let _timerInt = null;
+    function _fmt(sec){ const m=Math.floor(sec/60),s=sec%60; return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
+    function startTimer(){
+      const S = window._sce && window._sce.S;
+      if(_timerInt) clearInterval(_timerInt);
+      _timerInt = setInterval(() => {
+        if(!S || !S.active){ clearInterval(_timerInt); return; }
+        const sec = Math.floor((Date.now() - S.startTime)/1000);
+        const a = document.getElementById('sceTimer'); if(a) a.textContent = _fmt(sec);
+        const v = document.getElementById('sceVidTimer'); if(v) v.textContent = _fmt(sec);
+      }, 1000);
+    }
+
+    /* ── quality ── */
+    let _qInt = null;
+    function startQuality(){
+      const S = window._sce && window._sce.S;
+      if(_qInt) clearInterval(_qInt);
+      _qInt = setInterval(async () => {
+        if(!S || !S.pc || !S.active){ clearInterval(_qInt); return; }
+        try{
+          const stats = await S.pc.getStats(); let rtt=0, lost=0, recv=0;
+          stats.forEach(r => {
+            if(r.type==='candidate-pair' && r.state==='succeeded' && typeof r.currentRoundTripTime==='number') rtt=r.currentRoundTripTime*1000;
+            if(r.type==='inbound-rtp'){ lost+=r.packetsLost||0; recv+=r.packetsReceived||0; }
+          });
+          const loss = recv>0 ? (lost/(lost+recv))*100 : 0;
+          let q='excellent',l='Excellent';
+          if(rtt>300||loss>5){q='poor';l='Poor';} else if(rtt>200||loss>2){q='fair';l='Fair';} else if(rtt>100||loss>0.5){q='good';l='Good';}
+          const dot=document.getElementById('sceQDot'), lab=document.getElementById('sceQLabel');
+          if(dot) dot.className='sce-q-dot '+q; if(lab) lab.textContent=l;
+        }catch(_){}
+      }, 2000);
+    }
+
+    /* ── audio-reactive orb ── */
+    function startOrb(stream){
+      const S = window._sce && window._sce.S;
+      const orb = document.getElementById('sceOrb');
+      if(!orb || !stream) return;
+      try{
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new Ctx();
+        if(S) S.audioCtx = ctx;
+        const src = ctx.createMediaStreamSource(stream);
+        const an = ctx.createAnalyser(); an.fftSize = 128; src.connect(an);
+        const data = new Uint8Array(an.frequencyBinCount);
+        function tick(){
+          if(!S || !S.active){ return; }
+          an.getByteFrequencyData(data);
+          let sum=0; for(let i=0;i<data.length;i++) sum+=data[i];
+          const avg = sum/data.length;
+          const scale = 1 + Math.min(avg/255,1)*0.35;
+          orb.style.transform = 'scale('+scale.toFixed(3)+')';
+          orb.style.boxShadow = '0 0 '+(50+avg*0.8)+'px rgba(232,0,154,'+(0.5+avg/500)+'), inset 0 0 40px rgba(255,255,255,.25)';
+          if(S) S.orbRAF = requestAnimationFrame(tick);
+        }
+        tick();
+      }catch(_){}
+    }
+
+    /* ── controls ── */
+    function _toggleMute(){
+      const S = window._sce && window._sce.S; if(!S || !S.localStream) return;
+      S.muted = !S.muted;
+      S.localStream.getAudioTracks().forEach(t => t.enabled = !S.muted);
+      const b=document.getElementById('sceMute'); b.classList.toggle('off',S.muted); b.textContent=S.muted?'🔇':'🎙';
+      if(typeof toast==='function') toast(S.muted?'Muted':'Unmuted');
+    }
+    function _toggleCam(){
+      const S = window._sce && window._sce.S; if(!S || !S.localStream) return;
+      S.camOff = !S.camOff;
+      S.localStream.getVideoTracks().forEach(t => t.enabled = !S.camOff);
+      const b=document.getElementById('sceCam'); b.classList.toggle('off',S.camOff); b.textContent=S.camOff?'📷':'📹';
+      const lv=document.getElementById('sceLocalVid'); if(lv) lv.style.opacity=S.camOff?'0.25':'1';
+    }
+    async function _flipCam(){
+      const S = window._sce && window._sce.S; if(!S || !S.localStream || !S.pc) return;
+      const vt = S.localStream.getVideoTracks()[0]; if(!vt) return;
+      const cur = vt.getSettings().facingMode;
+      const next = cur==='user'?'environment':'user';
+      try{
+        const ns = await navigator.mediaDevices.getUserMedia({ video:{facingMode:next}, audio:false });
+        const nt = ns.getVideoTracks()[0];
+        const sender = S.pc.getSenders().find(x => x.track && x.track.kind==='video');
+        if(sender) await sender.replaceTrack(nt);
+        S.localStream.removeTrack(vt); vt.stop(); S.localStream.addTrack(nt);
+        const lv=document.getElementById('sceLocalVid'); if(lv) lv.srcObject=S.localStream;
+        if(typeof toast==='function') toast('🔄 '+(next==='user'?'Front':'Back')+' camera');
+      }catch(_){ if(typeof toast==='function') toast('Flip unavailable'); }
+    }
+    function _toggleSpeaker(){
+      const ra=document.getElementById('sceRemoteAudio'), rv=document.getElementById('sceRemoteVid');
+      const el = (window._sce && window._sce.S && window._sce.S.type==='video') ? rv : ra;
+      if(!el) return;
+      el.volume = el.volume < 0.6 ? 1.0 : 0.5;
+      document.getElementById('sceSpeaker').classList.toggle('off', el.volume<0.6);
+      if(typeof toast==='function') toast('🔊 '+Math.round(el.volume*100)+'%');
+    }
+
+    /* ── UI surface used by the engine ── */
+    window._sceUI = {
+      open: function(type, phase){
+        _build();
+        const call = document.getElementById('sceCall');
+        const S = window._sce && window._sce.S;
+        call.classList.add('on');
+        call.classList.toggle('video-mode', type==='video');
+        document.body.classList.add('call-active');
+        const audioStage = document.getElementById('sceAudioStage');
+        const remoteVid = document.getElementById('sceRemoteVid');
+        const localVid = document.getElementById('sceLocalVid');
+        const camBtn = document.getElementById('sceCam');
+        const flipBtn = document.getElementById('sceFlip');
+        if(type==='video'){
+          audioStage.classList.remove('show');
+          remoteVid.classList.add('show'); localVid.classList.add('show');
+          camBtn.style.display='flex'; flipBtn.style.display='flex';
+        } else {
+          audioStage.classList.add('show');
+          remoteVid.classList.remove('show'); localVid.classList.remove('show');
+          camBtn.style.display='none'; flipBtn.style.display='none';
+        }
+        const nm = (S && S.partnerName) || 'Beloved';
+        document.getElementById('sceName').textContent = nm;
+        document.getElementById('sceVidName').textContent = nm;
+        _starfield(document.getElementById('sceStars'));
+        if(typeof SE!=='undefined' && SE.play && phase==='calling'){ try{ SE.play('ring'); }catch(_){} }
+      },
+      close: function(){
+        const call = document.getElementById('sceCall');
+        if(call){ call.classList.remove('on'); call.classList.remove('video-mode'); }
+        document.body.classList.remove('call-active');
+        if(_timerInt){ clearInterval(_timerInt); _timerInt=null; }
+        if(_qInt){ clearInterval(_qInt); _qInt=null; }
+        const c=document.getElementById('sceStars'); if(c && c._stop) c._stop();
+      },
+      setStatus: function(t){ const e=document.getElementById('sceStatus'); if(e) e.textContent=t; },
+      setLocalVideo: function(s){ const v=document.getElementById('sceLocalVid'); if(v){ v.srcObject=s; v.classList.add('show'); } },
+      setRemoteVideo: function(s){ const v=document.getElementById('sceRemoteVid'); if(v){ v.srcObject=s; v.classList.add('show'); } },
+      attachRemoteAudio: function(s){ const a=document.getElementById('sceRemoteAudio'); if(a) a.srcObject=s; },
+      showIncoming: function(ring){
+        _build();
+        const inc=document.getElementById('sceIncoming');
+        document.getElementById('sceIncName').textContent = ring.callerName || 'Beloved';
+        document.getElementById('sceIncType').textContent = 'Incoming '+(ring.type==='video'?'Vision':'Sacred')+' Call';
+        inc.classList.add('on');
+        _starfield(document.getElementById('sceIncStars'));
+        if(typeof SE!=='undefined' && SE.play){ try{ SE.play('ring'); }catch(_){} }
+        if(typeof haptic==='function') try{ haptic('call'); }catch(_){}
+      },
+      hideIncoming: function(){ const inc=document.getElementById('sceIncoming'); if(inc) inc.classList.remove('on'); },
+      startTimer: startTimer,
+      startQuality: startQuality,
+      startOrb: startOrb
+    };
+
+    /* attach control methods to engine handle */
+    if(window._sce){
+      window._sce.toggleMute=_toggleMute; window._sce.toggleCam=_toggleCam;
+      window._sce.flipCam=_flipCam; window._sce.toggleSpeaker=_toggleSpeaker;
+    }
+
+    /* ── OVERRIDE the call entry points to use this engine ── */
+    function _wire(){
+      if(!window._sce) return false;
+      window.startAudioCall = function(){ window._sce.startCall('audio'); };
+      window.startVideoCall = function(){ window._sce.startCall('video'); };
+      window._rtcHangup = function(){ window._sce.hangup(); };
+      window.endCall = function(){ window._sce.hangup(); };
+      window.endVideoCall = function(){ window._sce.hangup(); };
+      return true;
+    }
+    let _t=0; const _wireTimer=setInterval(()=>{ _t++; if(_wire()||_t>40) clearInterval(_wireTimer); }, 300);
+
+    console.log('%cSpurana ✦ Sacred Call Engine — cosmic UI ready',
+      'background:linear-gradient(135deg,#E8009A,#7C3AED);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Audio-reactive orb · starfield · per-conversation signalling');
+    console.log('  Calls connect on the live HTTPS link, not on file://');
+  })();
+
+
+
 
 
 

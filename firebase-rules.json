@@ -448,6 +448,18 @@
         "iceFromReceiver": {
           "$key": {}
         }
+      },
+      "ring": {
+        "$uid": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      },
+      "rooms": {
+        "$convId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
       }
     }
   }

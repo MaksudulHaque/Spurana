@@ -210,6 +210,37 @@
           "name": {
             ".validate": "newData.isString() && newData.val().length <= 80"
           }
+        },
+        "echoes": {
+          ".indexOn": [
+            "ts"
+          ],
+          "$echoId": {
+            ".validate": "newData.hasChildren(['type', 'status', 'ts', 'callerUid'])",
+            "callerUid": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "callerName": {
+              ".validate": "newData.isString() && newData.val().length <= 80"
+            },
+            "type": {
+              ".validate": "newData.isString() && newData.val().length <= 10"
+            },
+            "status": {
+              ".validate": "newData.isString() && newData.val().length <= 16"
+            },
+            "dur": {
+              ".validate": "newData.isNumber()"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "seenBy": {
+              "$uid": {
+                ".validate": "newData.isBoolean()"
+              }
+            }
+          }
         }
       }
     },

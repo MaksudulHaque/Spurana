@@ -1694,7 +1694,7 @@ function initCosmicCanvas(){
   if(cosmicRaf){cancelAnimationFrame(cosmicRaf);cosmicRaf=null;}
   const canvas=g('cosmicCanvas');const ctx=canvas.getContext('2d');canvas.width=window.innerWidth;canvas.height=window.innerHeight;
   const p=ENV_PALETTES[currentEnv]||ENV_PALETTES.cosmos;let particles=[];
-  for(let i=0;i<140;i++)particles.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.5+0.3,speed:Math.random()*0.25+0.04,opacity:Math.random()*0.7+0.1,hue:p.particle,twinkle:Math.random()*Math.PI*2,drift:(Math.random()-.5)*.2});
+  for(let i=0;i<60;i++)particles.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*1.5+0.3,speed:Math.random()*0.25+0.04,opacity:Math.random()*0.7+0.1,hue:p.particle,twinkle:Math.random()*Math.PI*2,drift:(Math.random()-.5)*.2});
   function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);const g1=ctx.createRadialGradient(canvas.width*.5,canvas.height*.3,0,canvas.width*.5,canvas.height*.3,canvas.width*.6);g1.addColorStop(0,`hsla(${p.particle},${p.sat},40%,.07)`);g1.addColorStop(1,'transparent');ctx.fillStyle=g1;ctx.fillRect(0,0,canvas.width,canvas.height);const g2=ctx.createRadialGradient(canvas.width*.8,canvas.height*.7,0,canvas.width*.8,canvas.height*.7,canvas.width*.4);g2.addColorStop(0,`hsla(${(p.particle+40)%360},${p.sat},30%,.04)`);g2.addColorStop(1,'transparent');ctx.fillStyle=g2;ctx.fillRect(0,0,canvas.width,canvas.height);particles.forEach(pt=>{pt.y-=pt.speed;pt.x+=pt.drift;pt.twinkle+=.02;const tw=Math.sin(pt.twinkle)*.3+.7;if(pt.y<-2){pt.y=canvas.height+2;pt.x=Math.random()*canvas.width;}if(pt.x<-2)pt.x=canvas.width+2;if(pt.x>canvas.width+2)pt.x=-2;ctx.beginPath();ctx.arc(pt.x,pt.y,pt.r,0,Math.PI*2);ctx.fillStyle=`hsla(${pt.hue},60%,85%,${pt.opacity*tw})`;ctx.fill();});cosmicRaf=requestAnimationFrame(draw);}
   draw();
 }
@@ -2102,7 +2102,7 @@ function startEnvCanvas(env){
   const ctx=cv.getContext('2d');cv.width=window.innerWidth;cv.height=window.innerHeight;
   const W=cv.width,H=cv.height,t0=performance.now();
   const draw=ENV_FX[env];if(!draw){ctx.clearRect(0,0,W,H);return;}
-  function loop(){const t=(performance.now()-t0)/1000;ctx.clearRect(0,0,W,H);draw(ctx,W,H,t);_envRaf=requestAnimationFrame(loop);}
+  let _envLastTs=0;function loop(ts){_envRaf=requestAnimationFrame(loop);if(ts&&ts-_envLastTs<33)return;_envLastTs=ts||0;const t=(performance.now()-t0)/1000;ctx.clearRect(0,0,W,H);draw(ctx,W,H,t);}
   loop();
 }
 window.addEventListener('resize',()=>{const cv=document.getElementById('envCanvas');if(cv){cv.width=window.innerWidth;cv.height=window.innerHeight;}startEnvCanvas(currentEnv);});
@@ -34696,6 +34696,7 @@ body.call-active #mscFloat {
 
     let _ghostLog = [];
     function _huntGhosts(){
+      return; /* PERF: disabled — env-strip docked + mode-strip removed make this obsolete; getComputedStyle scan caused heating */
       try{
         const header = document.getElementById('cleanTopBar');
         const headerBottom = header ? header.getBoundingClientRect().bottom : 64;
@@ -34816,6 +34817,7 @@ body.call-active #mscFloat {
     let _killLog = [];
 
     function _killTopLeftGhosts(){
+      return; /* PERF: disabled — structural fixes handle this; scan caused heating */
       try{
         const header = document.getElementById('cleanTopBar');
         const headerBottom = header ? header.getBoundingClientRect().bottom : 64;
@@ -34983,6 +34985,7 @@ body.call-active #mscFloat {
     function _cleanBand(){
       try{
         _nukeTapToHear();
+        return; /* PERF: scan disabled — #ltTapToHear nuke kept; getComputedStyle scan caused heating */
         const header = document.getElementById('cleanTopBar');
         if(!header) return;
         const hb = header.getBoundingClientRect().bottom;
@@ -36805,6 +36808,413 @@ html.low-battery::before{ content: none !important; display: none !important; }
     console.log('  Realm strip fixed under header · messages scroll beneath · composer corners clean');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  PERFORMANCE + POLISH                                          ║
+     ║   A · HEAT — disable GPU-heavy backdrop blur on phones; pause  ║
+     ║       the cosmos canvas when a modal/call is open or hidden    ║
+     ║   B · realm strip docked under header via flow (no fragile     ║
+     ║       fixed positioning) — fixes the date-line collision       ║
+     ║   C · header hidden until logged in                            ║
+     ║   D · Watch Together: a clean full-screen mobile layout        ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function PerfPolish(){
+    'use strict';
+
+    if(!document.getElementById('perfPolishStyles')){
+      const st = document.createElement('style');
+      st.id = 'perfPolishStyles';
+      st.textContent = `
+/* ══ A · HEAT: kill backdrop blur on phones (biggest GPU/heat saver) ══ */
+@media (hover: none), (max-width: 820px){
+  #cleanTopBar, .env-strip, .env-strip-wrap, .input-zone, #ltBar, #ltChip,
+  .rtc-controls, #ccControls, #ccTopBar, #rtcIncoming, .vp-chat-col,
+  #vpModal, .feat-modal, .modal, .sheet, .cc-fs-card, #ccAway,
+  .msc-panel, #mscPanel, .toast, #toast, .divine-speech, .cc-away-card{
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  /* solid backgrounds so the un-blurred chrome still reads cleanly */
+  #cleanTopBar{ background:#0a0610 !important; }
+  .input-zone{ background:#0b0710 !important; }
+}
+
+/* ══ B · realm strip docked under the header (flow-based, robust) ══ */
+#app{ padding-top: calc(env(safe-area-inset-top,0) + 50px) !important; }
+.env-strip-wrap{
+  position: relative !important;
+  top: auto !important; left:auto !important; right:auto !important;
+  margin: 0 !important;
+  z-index: 5 !important;
+  flex-shrink: 0 !important;
+  background: #0a0610 !important;
+  box-shadow: 0 4px 14px rgba(7,3,15,.5) !important;
+}
+.env-strip{ margin-top: 0 !important; background:#0a0610 !important; min-height:34px !important; }
+#msgs, .msgs-wrap, .messages, .chat-area{ padding-top: 8px !important; }
+@media (max-width: 600px){
+  #app{ padding-top: calc(env(safe-area-inset-top,0) + 48px) !important; }
+}
+
+/* ══ C · hide the header until logged in ══ */
+#cleanTopBar.pre-login{ display:none !important; }
+
+/* ══ D · Watch Together — clean full-screen mobile layout ══ */
+@media (max-width: 880px), (orientation: portrait){
+  #vpModal.cinema{ padding: 0 !important; align-items: stretch !important; }
+  #vpModal.cinema > div{
+    max-width: none !important; width:100% !important; height:100% !important;
+    margin:0 !important; border-radius:0 !important; display:flex; flex-direction:column;
+    padding: calc(env(safe-area-inset-top,0) + 10px) 10px calc(env(safe-area-inset-bottom,0) + 10px) !important;
+  }
+  #vpModal.cinema .vp-split{ flex-direction:column !important; flex:1 1 auto; min-height:0; gap:10px; }
+  #vpModal.cinema .vp-video-col{ flex:0 0 auto; }
+  #vpModal.cinema .vp-chat-col{
+    flex:1 1 auto !important; width:100% !important; max-height:none !important; min-height:120px;
+  }
+}
+      `;
+      document.head.appendChild(st);
+    }
+
+    /* ── C · header login gate (JS for reliability across browsers) ── */
+    function _syncHeader(){
+      const app = document.getElementById('app');
+      const bar = document.getElementById('cleanTopBar');
+      if(!app || !bar) return;
+      const loggedOut = app.classList.contains('off');
+      bar.classList.toggle('pre-login', loggedOut);
+    }
+    /* observe #app class changes + a light interval as backstop */
+    const app = document.getElementById('app');
+    if(app && window.MutationObserver){
+      new MutationObserver(_syncHeader).observe(app, { attributes:true, attributeFilter:['class'] });
+    }
+    let _hTries = 0;
+    const _hTimer = setInterval(() => { _hTries++; _syncHeader(); if(_hTries>40) clearInterval(_hTimer); }, 500);
+    _syncHeader();
+
+    /* ── A · pause the cosmos canvas while a modal/call is open or tab hidden ── */
+    function _heavyOverlayOpen(){
+      const vp = document.getElementById('vpModal');
+      const rtc = document.getElementById('rtcCall');
+      const open = (el) => el && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
+      return open(vp) || open(rtc);
+    }
+    function _throttleCosmos(){
+      /* When a full-screen experience is up, the background canvas is wasted
+         work — hide its canvas so the GPU rests. */
+      const canv = document.querySelector('canvas#cosmicCanvas, canvas#envCanvas, .env-canvas, #bgCanvas');
+      document.querySelectorAll('canvas').forEach(cv => {
+        const id = cv.id || '';
+        if(/cosmic|env|bg|star/i.test(id) && cv.id !== 'ccStarfield'){
+          const shouldHide = _heavyOverlayOpen() || document.hidden;
+          cv.style.visibility = shouldHide ? 'hidden' : '';
+        }
+      });
+    }
+    setInterval(_throttleCosmos, 1200);
+    document.addEventListener('visibilitychange', _throttleCosmos);
+
+    window._perfPolish = { syncHeader: _syncHeader, throttleCosmos: _throttleCosmos };
+
+    console.log('%cSpurana ✦ Performance + Polish — cooler, cleaner, docked',
+      'background:linear-gradient(135deg,#10B981,#22C55E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  mobile blur off · cosmos pauses under modals · realm strip docked · header login-gated · watch mobile clean');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  MESSENGER-CLEAN CHAT — the top zone, finally right            ║
+     ║                                                                ║
+     ║  Two root causes, both now fixed:                              ║
+     ║                                                                ║
+     ║  ① EMPTY SPACE after the header: hidden legacy elements        ║
+     ║    (.topbar, #envNow, #searchBar) + margin hacks left a gap    ║
+     ║    above the realm strip. Now #app pads exactly the header     ║
+     ║    height and the realm strip docks flush beneath it.          ║
+     ║                                                                ║
+     ║  ② The "date marked pink area" colliding with the realm strip  ║
+     ║    was the date divider (.day-sep) — it's position:sticky;     ║
+     ║    top:0 with a pink gradient, so it stuck to the top of the   ║
+     ║    scroll area right against the realm strip. Now date         ║
+     ║    dividers are STATIC and Messenger-clean (subtle, centered,  ║
+     ║    no background) — they scroll with the messages and never    ║
+     ║    collide with anything.                                      ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function MessengerCleanChat(){
+    'use strict';
+
+    if(!document.getElementById('msgrCleanStyles')){
+      const s = document.createElement('style');
+      s.id = 'msgrCleanStyles';
+      s.textContent = `
+/* ── ① Realm strip docked flush under the header — no empty gap ── */
+.topbar{ display:none !important; }
+.env-now, #envNow{ display:none !important; }
+#searchBar:not(.on){ display:none !important; }
+
+#app{ padding-top: calc(env(safe-area-inset-top,0) + 50px) !important; }
+@media (max-width:600px){ #app{ padding-top: calc(env(safe-area-inset-top,0) + 48px) !important; } }
+
+.env-strip-wrap{
+  position: relative !important;
+  top: auto !important; left:auto !important; right:auto !important;
+  margin: 0 !important; padding: 0 !important;
+  flex-shrink: 0 !important;
+  z-index: 6 !important;
+  background: #0a0610 !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,.45) !important;
+}
+.env-strip{
+  margin: 0 !important;
+  background: #0a0610 !important;
+  border-bottom: 1px solid rgba(255,255,255,.05) !important;
+  min-height: 34px !important;
+}
+
+/* ── ② Date dividers: static + Messenger-clean (kills the pink collision) ── */
+.day-sep, .date-divider, .day-divider, .msg-date{
+  position: static !important;
+  top: auto !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  color: rgba(255,255,255,.3) !important;
+  font-family: 'Orbitron', monospace !important;
+  font-size: 10px !important;
+  letter-spacing: .18em !important;
+  text-transform: uppercase !important;
+  text-align: center !important;
+  padding: 16px 0 10px !important;
+  margin: 0 !important;
+}
+
+/* ── messages begin cleanly right under the realm strip ── */
+#msgs, .msgs-wrap, .messages, .chat-area{ padding-top: 6px !important; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* Force-hide the legacy elements above the realm strip (belt + suspenders) */
+    function _tidyTop(){
+      ['envNow'].forEach(id => { const el=document.getElementById(id); if(el) el.style.display='none'; });
+      document.querySelectorAll('.topbar, .env-now').forEach(el => { el.style.display='none'; });
+      const sb = document.getElementById('searchBar');
+      if(sb && !sb.classList.contains('on')) sb.style.display='none';
+      /* de-stick any date dividers that scripts may add later */
+      document.querySelectorAll('.day-sep, .date-divider, .day-divider, .msg-date').forEach(el => {
+        if(getComputedStyle(el).position === 'sticky') el.style.position = 'static';
+      });
+    }
+
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _tidyTop();
+      if(_tries > 12) clearInterval(_timer);   /* ~6s, then stop (no heat) */
+    }, 500);
+
+    window._msgrClean = { tidy: _tidyTop };
+
+    console.log('%cSpurana ✦ Messenger-Clean Chat — realm strip docked, date dividers de-stuck',
+      'background:linear-gradient(135deg,#0A84FF,#22C55E);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  No empty gap · the pink date bar no longer collides with the realm strip');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  ATTUNE & ALIVE — realm/guide chosen at the threshold, not in  ║
+     ║  the chat; the chat itself breathes                            ║
+     ║                                                                ║
+     ║   ① Realm strip removed from the chat (the clutter is gone)    ║
+     ║   ② After login you choose your Divine Guide AND your Mood     ║
+     ║      World — a calm two-step attunement, re-openable anytime   ║
+     ║   ③ The pink date bar is restored (you liked it) — and with    ║
+     ║      the realm strip gone it no longer collides with anything  ║
+     ║   ④ The header comes alive: a breathing presence aura, the     ║
+     ║      beloved's live state, and the current realm as a glow     ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function AttuneAlive(){
+    'use strict';
+
+    if(!document.getElementById('attuneAliveStyles')){
+      const s = document.createElement('style');
+      s.id = 'attuneAliveStyles';
+      s.textContent = `
+/* ── ① Realm strip OUT of the chat ── */
+.env-strip-wrap, .env-now, #envNow{ display:none !important; }
+#app{ padding-top: calc(env(safe-area-inset-top,0) + 50px) !important; }
+@media (max-width:600px){ #app{ padding-top: calc(env(safe-area-inset-top,0) + 48px) !important; } }
+#msgs, .msgs-wrap, .messages, .chat-area{ padding-top: 6px !important; }
+
+/* ── ③ Restore the pink sticky date bar (now collides with nothing) ── */
+.day-sep{
+  position: sticky !important; top: 0 !important; z-index: 9 !important;
+  background: linear-gradient(90deg,transparent,rgba(192,0,122,.16),transparent) !important;
+  color: rgba(255,225,240,.55) !important;
+  font-family: 'Orbitron', monospace !important;
+  font-size: 9px !important; letter-spacing: .22em !important; text-transform: uppercase !important;
+  text-align: center !important; padding: 9px 0 !important; margin: 0 !important;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.date-divider, .day-divider, .msg-date{ position: static !important; }
+
+/* ── ② The Attune realm picker ── */
+#realmPicker{
+  position: fixed; inset: 0; z-index: 9820; display:none;
+  align-items:center; justify-content:center; padding:24px;
+  background: radial-gradient(ellipse at 50% 25%, rgba(24,10,40,.98), rgba(6,3,12,.99));
+}
+#realmPicker.on{ display:flex; animation: rpFade .4s ease; }
+@keyframes rpFade{ from{opacity:0} to{opacity:1} }
+.rp-card{ width:100%; max-width:560px; max-height:84vh; display:flex; flex-direction:column; text-align:center; }
+.rp-title{ font-family:'Cinzel Decorative',serif; font-size:22px; color:#fff; letter-spacing:.04em;
+  background:linear-gradient(135deg,#E2C28A,#E8009A); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.rp-sub{ font-family:'Cormorant Garamond',serif; font-style:italic; font-size:15px; color:rgba(232,225,245,.65); margin:8px 0 20px; }
+.rp-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:10px; overflow-y:auto; padding:4px; flex:1; }
+.rp-chip{ padding:12px 8px; border-radius:14px; border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.04); color:rgba(242,235,248,.85); cursor:pointer; transition:.2s;
+  display:flex; flex-direction:column; align-items:center; gap:6px; font-family:'Rajdhani',sans-serif; font-size:13px; }
+.rp-chip:hover{ background:rgba(255,255,255,.09); transform:translateY(-2px); }
+.rp-chip.sel{ border-color:transparent; box-shadow:0 0 18px rgba(232,0,154,.5); background:rgba(232,0,154,.18); }
+.rp-chip .rp-dot{ width:14px; height:14px; border-radius:50%; box-shadow:0 0 10px currentColor; }
+.rp-done{ margin-top:18px; padding:13px 30px; border-radius:999px; border:none; align-self:center;
+  background:linear-gradient(135deg,#E8009A,#C0007A); color:#fff; font-family:'Cinzel Decorative',serif;
+  font-size:13px; letter-spacing:.08em; cursor:pointer; box-shadow:0 6px 24px rgba(192,0,122,.4); }
+.rp-done:active{ transform:scale(.96); }
+
+/* ── ④ A living header ── */
+#ctbAvatar{ position:relative; }
+#ctbAvatar::after{
+  content:''; position:absolute; inset:-4px; border-radius:50%;
+  border:1.5px solid rgba(232,0,154,.4); animation: aliveAura 3.5s ease-in-out infinite; pointer-events:none;
+}
+@keyframes aliveAura{ 0%,100%{transform:scale(1);opacity:.5} 50%{transform:scale(1.12);opacity:.9} }
+#ctbStatus .presence-live{ display:inline-flex; align-items:center; gap:5px; }
+#ctbStatus .presence-live::before{
+  content:''; width:7px; height:7px; border-radius:50%; background:#34D399;
+  box-shadow:0 0 8px #34D399; animation: alivePulse 1.8s ease-in-out infinite;
+}
+@keyframes alivePulse{ 0%,100%{opacity:.55} 50%{opacity:1} }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ── Build the realm picker (clones the existing realm buttons) ── */
+    function _buildRealmPicker(){
+      if(document.getElementById('realmPicker')) return;
+      const picker = document.createElement('div');
+      picker.id = 'realmPicker';
+      picker.innerHTML = `
+        <div class="rp-card">
+          <div class="rp-title">Choose your Mood World</div>
+          <div class="rp-sub">The realm your sanctuary breathes in — you can shift it anytime.</div>
+          <div class="rp-grid" id="rpGrid"></div>
+          <button class="rp-done" id="rpDone">Enter ✦</button>
+        </div>`;
+      document.body.appendChild(picker);
+
+      const grid = picker.querySelector('#rpGrid');
+      /* clone realm buttons from the (hidden) env-strip so we reuse the real list + setEnv */
+      const envBtns = document.querySelectorAll('.env-strip .env-btn');
+      let chosen = null;
+      envBtns.forEach(btn => {
+        const env = btn.getAttribute('data-env');
+        const dot = btn.querySelector('.env-dot');
+        const color = dot ? dot.style.background : '#E8009A';
+        const label = btn.textContent.trim();
+        const chip = document.createElement('div');
+        chip.className = 'rp-chip' + (btn.classList.contains('on') ? ' sel' : '');
+        chip.innerHTML = `<span class="rp-dot" style="background:${color};color:${color}"></span>${label}`;
+        if(btn.classList.contains('on')) chosen = { env, btn };
+        chip.addEventListener('click', () => {
+          grid.querySelectorAll('.rp-chip').forEach(c => c.classList.remove('sel'));
+          chip.classList.add('sel');
+          chosen = { env, btn };
+        });
+        grid.appendChild(chip);
+      });
+
+      picker.querySelector('#rpDone').addEventListener('click', () => {
+        if(chosen && typeof window.setEnv === 'function'){
+          window.setEnv(chosen.btn, chosen.env);
+          if(typeof db !== 'undefined' && db && typeof me !== 'undefined' && me){
+            db.ref('users/'+me.uid).update({ realm: chosen.env }).catch(()=>{});
+          }
+        }
+        picker.classList.remove('on');
+        if(typeof toast === 'function') toast('✦ Your sanctuary is attuned');
+      });
+    }
+
+    function _openRealmPicker(){
+      _buildRealmPicker();
+      document.getElementById('realmPicker').classList.add('on');
+    }
+    window._openRealmPicker = _openRealmPicker;
+    window._reAttune = function(){ if(typeof openDeitySelector==='function') openDeitySelector(); };
+
+    /* ── Chain the realm picker AFTER the deity is confirmed (post-login) ── */
+    function _hookDeityConfirm(){
+      if(typeof window.confirmDeitySelection === 'function' && !window.confirmDeitySelection.__attune){
+        const orig = window.confirmDeitySelection;
+        window.confirmDeitySelection = function(){
+          const r = orig.apply(this, arguments);
+          /* after the guide is chosen, gently offer the realm */
+          setTimeout(_openRealmPicker, 700);
+          return r;
+        };
+        window.confirmDeitySelection.__attune = true;
+      }
+    }
+
+    /* ── Make the header status line feel alive ── */
+    function _enliven(){
+      const status = document.getElementById('ctbStatus');
+      if(status && !status.dataset.alive){
+        /* if it currently shows an online-ish state, wrap with a live pulse */
+        const txt = (status.textContent || '').trim();
+        if(/online|active|now|listening|here/i.test(txt)){
+          status.dataset.alive = '1';
+          status.innerHTML = '<span class="presence-live">' + txt + '</span>';
+        }
+      }
+    }
+
+    /* ── Re-attune entry: long-press the avatar opens guide+realm ── */
+    function _wireReattune(){
+      const av = document.getElementById('ctbAvatar');
+      if(av && !av.dataset.reattune){
+        av.dataset.reattune = '1';
+        let t = null;
+        const start = () => { t = setTimeout(() => { _openRealmPicker(); }, 600); };
+        const cancel = () => { if(t) clearTimeout(t); };
+        av.addEventListener('touchstart', start, {passive:true});
+        av.addEventListener('touchend', cancel);
+        av.addEventListener('mousedown', start);
+        av.addEventListener('mouseup', cancel);
+        av.addEventListener('mouseleave', cancel);
+      }
+    }
+
+    let _tries = 0;
+    const _timer = setInterval(() => {
+      _tries++;
+      _hookDeityConfirm();
+      _enliven();
+      _wireReattune();
+      if(_tries > 30) clearInterval(_timer);
+    }, 500);
+
+    window._attune = { openRealm: _openRealmPicker, reAttune: window._reAttune };
+
+    console.log('%cSpurana ✦ Attune & Alive — realm chosen at the threshold, chat breathes',
+      'background:linear-gradient(135deg,#E8009A,#E2C28A);color:#1a0a14;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  realm strip removed · post-login realm picker · pink date bar restored · living header');
+    console.log('  Long-press the avatar (or _attune.openRealm()) to change realm; _reAttune() for the guide');
+  })();
+
+
+
+
 
 
 
@@ -37708,6 +38118,413 @@ html.low-battery::before{ content: none !important; display: none !important; }
     console.log('  Audio-reactive orb · starfield · per-conversation signalling');
     console.log('  Calls connect on the live HTTPS link, not on file://');
   })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  SACRED CALL PRO — the world-class finishing layer            ║
+     ║                                                                ║
+     ║  Wraps the (already solid) Sacred Call engine + UI without     ║
+     ║  touching the WebRTC signalling. Adds the things that make a   ║
+     ║  call feel real:                                               ║
+     ║   · a gentle looping RINGBACK while you wait for an answer     ║
+     ║   · a warm looping RINGTONE + vibration on incoming calls      ║
+     ║   · MINIMIZE — shrink the call to a floating pill and keep     ║
+     ║     chatting; tap to return, tap ✕ to end                      ║
+     ║   · video calls AUTO-HIDE their controls for full immersion    ║
+     ║     (tap anywhere to reveal them again)                        ║
+     ║  All loops stop cleanly on connect / answer / decline / end.   ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function SacredCallPro(){
+    'use strict';
+
+    if(!document.getElementById('scProStyles')){
+      const s=document.createElement('style'); s.id='scProStyles';
+      s.textContent = `
+#scePill{
+  position:fixed; top:calc(env(safe-area-inset-top,0) + 12px); left:50%; transform:translateX(-50%);
+  z-index:100002; display:flex; align-items:center; gap:10px;
+  padding:8px 10px 8px 15px; border-radius:999px;
+  background:linear-gradient(135deg,rgba(124,58,237,.96),rgba(232,0,154,.96));
+  box-shadow:0 8px 30px rgba(0,0,0,.5),0 0 24px rgba(232,0,154,.4);
+  color:#fff; font-family:'Rajdhani',sans-serif; cursor:pointer; animation:scePillIn .3s ease;
+}
+@keyframes scePillIn{ from{opacity:0;transform:translate(-50%,-12px)} to{opacity:1;transform:translate(-50%,0)} }
+#scePillDot{ width:9px;height:9px;border-radius:50%;background:#34D399;box-shadow:0 0 8px #34D399;animation:scePillPulse 1.4s ease-in-out infinite;flex:0 0 auto; }
+@keyframes scePillPulse{ 0%,100%{opacity:.45} 50%{opacity:1} }
+#scePillTxt{ font-size:14px;font-weight:600;letter-spacing:.02em;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+#scePillTime{ font-family:'Orbitron',monospace;font-size:12px;opacity:.92; }
+#scePillEnd{ width:30px;height:30px;border-radius:50%;border:none;cursor:pointer;background:rgba(255,255,255,.22);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;flex:0 0 auto; }
+#scePillEnd:active{ transform:scale(.9); }
+
+#sceCall.video-mode #sceControls,
+#sceCall.video-mode #sceTopBar,
+#sceCall.video-mode #sceQuality{ transition:opacity .45s ease; }
+#sceCall.video-mode.ui-hidden #sceControls,
+#sceCall.video-mode.ui-hidden #sceTopBar,
+#sceCall.video-mode.ui-hidden #sceQuality{ opacity:0; pointer-events:none; }
+
+/* control bar must fit a phone even with 6 buttons */
+#sceControls{ max-width:calc(100vw - 20px); }
+@media (max-width:600px){
+  #sceControls{ gap:9px; padding:11px 12px; }
+  #sceControls .sce-ctl{ width:48px; height:48px; font-size:18px; }
+  #sceControls .sce-ctl.end{ width:56px; height:56px; font-size:21px; }
+}
+@media (max-width:360px){
+  #sceControls{ gap:7px; padding:10px 10px; }
+  #sceControls .sce-ctl{ width:44px; height:44px; font-size:17px; }
+  #sceControls .sce-ctl.end{ width:52px; height:52px; font-size:20px; }
+}
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ── gentle looping call tones (reuse the app's unlocked audio ctx) ── */
+    let _ax=null, _ringInt=null, _vibInt=null;
+    function _ctx(){
+      try{ if(typeof SE!=='undefined' && SE.ctx){ const c=SE.ctx(); if(c){ if(c.state==='suspended') c.resume(); return c; } } }catch(_){}
+      try{ if(!_ax) _ax=new (window.AudioContext||window.webkitAudioContext)(); if(_ax.state==='suspended') _ax.resume(); }catch(_){}
+      return _ax;
+    }
+    function _blip(freqs,dur,vol,when){
+      const c=_ctx(); if(!c) return; const t=c.currentTime+(when||0);
+      freqs.forEach(f=>{
+        const o=c.createOscillator(), g=c.createGain();
+        o.type='sine'; o.frequency.value=f;
+        g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(vol,t+0.05);
+        g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+        o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+dur+0.06);
+      });
+    }
+    function _ringbackOnce(){ _blip([480,440],0.9,0.05,0); }           /* soft double-tone, like a distant phone */
+    function _ringtoneOnce(){ _blip([660],0.34,0.085,0); _blip([880],0.42,0.085,0.4); _blip([587],0.5,0.06,0.86); }
+    function startRing(kind){
+      stopRing();
+      if(kind==='ringback'){ _ringbackOnce(); _ringInt=setInterval(_ringbackOnce,3200); }
+      else if(kind==='ringtone'){
+        _ringtoneOnce(); _ringInt=setInterval(_ringtoneOnce,2400);
+        if(navigator.vibrate){
+          try{ navigator.vibrate([300,150,300]); }catch(_){}
+          _vibInt=setInterval(()=>{ try{ navigator.vibrate([300,150,300]); }catch(_){} },2400);
+        }
+      }
+    }
+    function stopRing(){
+      if(_ringInt){ clearInterval(_ringInt); _ringInt=null; }
+      if(_vibInt){ clearInterval(_vibInt); _vibInt=null; try{ navigator.vibrate(0); }catch(_){} }
+    }
+
+    /* ── minimize to a floating pill ── */
+    let _pillInt=null;
+    function _minimize(){
+      const call=document.getElementById('sceCall'); if(call) call.style.display='none';
+      if(document.getElementById('scePill')) return;
+      const S=window._sce&&window._sce.S;
+      const pill=document.createElement('div'); pill.id='scePill';
+      pill.innerHTML='<span id="scePillDot"></span><span id="scePillTxt">'+((S&&S.partnerName)||'Call')+'</span><span id="scePillTime">00:00</span><button id="scePillEnd" title="End">✕</button>';
+      document.body.appendChild(pill);
+      pill.addEventListener('click',e=>{ if(e.target.id==='scePillEnd') return; _expand(); });
+      document.getElementById('scePillEnd').addEventListener('click',e=>{ e.stopPropagation(); if(window._sce) window._sce.hangup(); });
+      if(_pillInt) clearInterval(_pillInt);
+      _pillInt=setInterval(()=>{
+        const S=window._sce&&window._sce.S;
+        if(!S||!S.active){ clearInterval(_pillInt); _removePill(); return; }
+        const sec=S.startTime?Math.floor((Date.now()-S.startTime)/1000):0;
+        const m=Math.floor(sec/60),s=sec%60;
+        const el=document.getElementById('scePillTime'); if(el) el.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+      },1000);
+    }
+    function _expand(){ const call=document.getElementById('sceCall'); if(call) call.style.display='flex'; _removePill(); }
+    function _removePill(){ const p=document.getElementById('scePill'); if(p) p.remove(); if(_pillInt){ clearInterval(_pillInt); _pillInt=null; } }
+
+    /* ── auto-hide controls on video ── */
+    let _hideTimer=null;
+    function _armAutoHide(){
+      const call=document.getElementById('sceCall'); if(!call||!call.classList.contains('video-mode')) return;
+      if(_hideTimer) clearTimeout(_hideTimer);
+      call.classList.remove('ui-hidden');
+      _hideTimer=setTimeout(()=>{ if(call.classList.contains('video-mode')) call.classList.add('ui-hidden'); },4500);
+    }
+    function _wireVideoTap(){
+      const call=document.getElementById('sceCall'); if(!call||call._tapWired) return; call._tapWired=true;
+      call.addEventListener('click',e=>{
+        if(e.target.closest('#sceControls')||e.target.closest('#sceIncBtns')||e.target.closest('#scePill')) return;
+        if(!call.classList.contains('video-mode')) return;
+        if(call.classList.contains('ui-hidden')) _armAutoHide();
+        else { call.classList.add('ui-hidden'); if(_hideTimer) clearTimeout(_hideTimer); }
+      });
+    }
+
+    /* ── minimize button into the control bar ── */
+    function _injectMinBtn(){
+      const controls=document.getElementById('sceControls');
+      if(controls && !document.getElementById('sceMin')){
+        const min=document.createElement('button');
+        min.className='sce-ctl'; min.id='sceMin'; min.title='Minimize'; min.textContent='⤓';
+        min.addEventListener('click',_minimize);
+        controls.insertBefore(min, controls.firstChild);
+      }
+    }
+
+    /* ── wrap the engine + UI (poll until they exist) ── */
+    function _wrap(){
+      if(!window._sce || !window._sceUI || window._sce.__pro) return false;
+      const eng=window._sce, ui=window._sceUI; eng.__pro=true;
+
+      const _start=eng.startCall;
+      eng.startCall=async function(){ const r=await _start.apply(this,arguments); startRing('ringback'); return r; };
+
+      const _accept=eng.acceptIncoming;
+      eng.acceptIncoming=async function(){ stopRing(); return _accept.apply(this,arguments); };
+
+      const _decline=eng.declineIncoming;
+      eng.declineIncoming=function(){ stopRing(); return _decline.apply(this,arguments); };
+
+      const _hangup=eng.hangup;
+      eng.hangup=function(){ stopRing(); _removePill(); if(_hideTimer) clearTimeout(_hideTimer); return _hangup.apply(this,arguments); };
+
+      const _showInc=ui.showIncoming;
+      ui.showIncoming=function(){ const r=_showInc.apply(this,arguments); startRing('ringtone'); return r; };
+
+      const _hideInc=ui.hideIncoming;
+      ui.hideIncoming=function(){ stopRing(); return _hideInc.apply(this,arguments); };
+
+      const _open=ui.open;
+      ui.open=function(type,phase){ const r=_open.apply(this,arguments); _injectMinBtn(); _wireVideoTap(); if(type==='video') _armAutoHide(); return r; };
+
+      const _setStatus=ui.setStatus;
+      ui.setStatus=function(t){ if(/connected/i.test(t||'')) stopRing(); return _setStatus.apply(this,arguments); };
+
+      const _close=ui.close;
+      ui.close=function(){ stopRing(); _removePill(); if(_hideTimer) clearTimeout(_hideTimer); return _close.apply(this,arguments); };
+
+      return true;
+    }
+    let _t=0; const _wt=setInterval(()=>{ _t++; if(_wrap()||_t>60) clearInterval(_wt); },300);
+
+    window._scePro = { minimize:_minimize, expand:_expand, startRing, stopRing };
+
+    console.log('%cSpurana ✦ Sacred Call Pro — ringback, ringtone, minimize, immersion',
+      'background:linear-gradient(135deg,#7C3AED,#E8009A);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+  })();
+
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  COSMIC ECHOES — every call leaves a trace in the cosmos       ║
+     ║                                                                ║
+     ║  Not a cold "Missed call" log. The Spurana way:                ║
+     ║   · when a call ends, a soft ethereal note settles into the    ║
+     ║     chat — "✦ Sacred Call · 4:32" / "✦ Missed Vision Call"     ║
+     ║   · a missed call glows and offers to "return the light"       ║
+     ║   · a starlit LEDGER of every echo — long-press the 📞 icon    ║
+     ║   · the 📞 icon wears a soft star when an echo went unseen     ║
+     ║  All stored locally per sanctuary — no rules change needed.    ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function CosmicEchoes(){
+    'use strict';
+
+    if(!document.getElementById('echoStyles')){
+      const s=document.createElement('style'); s.id='echoStyles';
+      s.textContent = `
+.echo-note{ align-self:center; max-width:84%; margin:14px auto; padding:9px 16px; display:flex; align-items:center; gap:10px; border-radius:999px; background:linear-gradient(135deg, rgba(124,58,237,.14), rgba(232,0,154,.12)); border:1px solid rgba(232,0,154,.22); box-shadow:0 2px 18px rgba(124,58,237,.12); font-family:'Cormorant Garamond', serif; font-style:italic; color:rgba(246,236,255,.82); font-size:15px; animation:echoIn .5s ease; }
+@keyframes echoIn{ from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)} }
+.echo-note .echo-ic{ font-size:15px; filter:drop-shadow(0 0 6px rgba(232,0,154,.6)); }
+.echo-note.missed{ background:linear-gradient(135deg, rgba(232,0,154,.2), rgba(124,58,237,.14)); border-color:rgba(232,0,154,.4); }
+.echo-note .echo-return{ margin-left:4px; padding:4px 12px; border-radius:999px; border:none; cursor:pointer; background:linear-gradient(135deg,#E8009A,#7C3AED); color:#fff; font-family:'Rajdhani',sans-serif; font-style:normal; font-size:12px; letter-spacing:.04em; }
+.echo-note .echo-return:active{ transform:scale(.94); }
+#ctbAudio{ position:relative; }
+#ctbAudio .echo-dot{ position:absolute; top:-2px; right:-2px; width:11px; height:11px; border-radius:50%; background:radial-gradient(circle,#FFB8D0,#E8009A); box-shadow:0 0 8px #E8009A; animation:echoDot 1.8s ease-in-out infinite; }
+@keyframes echoDot{ 0%,100%{opacity:.6; transform:scale(1)} 50%{opacity:1; transform:scale(1.2)} }
+#echoLedger{ position:fixed; inset:0; z-index:99000; display:none; flex-direction:column; background:radial-gradient(ellipse at 50% 0%, #1a0a2e 0%, #0a0414 55%, #05020c 100%); padding:calc(env(safe-area-inset-top,0) + 18px) 18px calc(env(safe-area-inset-bottom,0) + 18px); }
+#echoLedger.on{ display:flex; animation:echoIn .35s ease; }
+.echo-head{ display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+.echo-head .echo-back{ background:none; border:none; color:#F6ECFF; font-size:24px; cursor:pointer; padding:4px 8px; }
+.echo-title{ font-family:'Cinzel Decorative',serif; font-size:21px; background:linear-gradient(135deg,#E2C28A,#E8009A); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.echo-sub{ font-family:'Cormorant Garamond',serif; font-style:italic; color:rgba(246,236,255,.55); font-size:14px; margin:0 0 14px 50px; }
+.echo-list{ flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:2px; }
+.echo-row{ display:flex; align-items:center; gap:14px; padding:13px 14px; border-radius:16px; background:rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.07); }
+.echo-row.missed{ background:rgba(232,0,154,.08); border-color:rgba(232,0,154,.25); }
+.echo-orb{ width:42px; height:42px; border-radius:50%; flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-size:18px; background:radial-gradient(circle at 35% 30%, rgba(255,122,192,.5), rgba(124,58,237,.4)); box-shadow:0 0 14px rgba(232,0,154,.3); }
+.echo-row.missed .echo-orb{ box-shadow:0 0 16px rgba(232,0,154,.6); }
+.echo-meta{ flex:1; min-width:0; }
+.echo-meta .echo-line1{ font-family:'Rajdhani',sans-serif; font-size:15px; color:#F6ECFF; font-weight:600; }
+.echo-meta .echo-line2{ font-family:'Cormorant Garamond',serif; font-style:italic; font-size:13px; color:rgba(246,236,255,.55); }
+.echo-row .echo-dir{ font-size:13px; opacity:.7; }
+.echo-call-back{ border:none; cursor:pointer; padding:8px 12px; border-radius:999px; flex:0 0 auto; background:linear-gradient(135deg,#E8009A,#7C3AED); color:#fff; font-size:15px; }
+.echo-call-back:active{ transform:scale(.92); }
+.echo-empty{ text-align:center; color:rgba(246,236,255,.5); font-family:'Cormorant Garamond',serif; font-style:italic; font-size:17px; margin-top:60px; line-height:1.6; }
+.echo-synced{ font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:rgba(52,211,153,.7); font-family:'Orbitron',monospace; margin-left:8px; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* ── helpers ── */
+    function _db(){ return (typeof db!=='undefined'&&db)?db:((typeof window!=='undefined'&&window.db)?window.db:null); }
+    function _myUid(){ return (typeof me!=='undefined'&&me&&me.uid)?me.uid:((typeof window!=='undefined'&&window.me&&window.me.uid)?window.me.uid:null); }
+    function _myName(){ return (typeof myName!=='undefined'&&myName)?myName:((typeof me!=='undefined'&&me&&me.name)?me.name:'Soul'); }
+    function _cid(){
+      const S=window._sce&&window._sce.S; if(S&&S.convId) return S.convId;
+      try{ if(window._msc&&window._msc.state){ const st=window._msc.state(); if(st&&st.activeConvId) return st.activeConvId; } }catch(_){}
+      return 'default';
+    }
+    function _fmtDur(sec){ sec=Math.max(0,Math.floor(sec||0)); const m=Math.floor(sec/60),s=sec%60; return m+':'+String(s).padStart(2,'0'); }
+    function _ago(ts){ const d=Date.now()-ts, min=Math.floor(d/60000); if(min<1)return'just now'; if(min<60)return min+'m ago'; const h=Math.floor(min/60); if(h<24)return h+'h ago'; const days=Math.floor(h/24); if(days<7)return days+'d ago'; try{return new Date(ts).toLocaleDateString();}catch(_){return'';} }
+    function _realm(t){ return t==='video'?'Vision':'Sacred'; }
+
+    /* ── shared echo state ── */
+    let _curConv=null, _ref=null, _woven=new Set();
+    const _cache={};   /* convId -> [echoes] */
+
+    function _attach(convId){
+      const database=_db(); if(!database||!convId||convId===_curConv) return;
+      if(_ref){ try{ _ref.off(); }catch(_){} _ref=null; }
+      _curConv=convId; _woven=new Set(); _cache[convId]=[];
+      _ref=database.ref('conversations/'+convId+'/echoes').limitToLast(40);
+      _ref.on('child_added', snap=>{
+        const e=snap.val(); if(!e) return; e.id=snap.key;
+        _cache[convId]=(_cache[convId]||[]).filter(x=>x.id!==e.id); _cache[convId].push(e);
+        _maybeWeave(e, convId); _refreshDot();
+      });
+      _ref.on('child_changed', snap=>{
+        const e=snap.val(); if(!e) return; e.id=snap.key;
+        _cache[convId]=(_cache[convId]||[]).map(x=>x.id===e.id?e:x); _refreshDot();
+      });
+    }
+
+    /* ── write the canonical echo (caller only) ── */
+    function _writeEcho(ev){
+      const database=_db(); const convId=ev.convId||_cid();
+      if(!database||!convId) return;
+      try{
+        database.ref('conversations/'+convId+'/echoes').push().set({
+          callerUid:_myUid()||'', callerName:_myName(),
+          type:ev.type||'audio', status:ev.status||'answered',
+          dur:Math.round(ev.dur||0), ts:Date.now()
+        }).catch(()=>{});
+      }catch(_){}
+    }
+
+    /* ── weave a note into the open chat (perspective-aware) ── */
+    function _maybeWeave(e, convId){
+      if(convId!==_cid() || _woven.has(e.id)) return;
+      const mine = e.callerUid===_myUid();
+      const seen = e.seenBy && _myUid() && e.seenBy[_myUid()];
+      const fresh = e.ts > (Date.now()-90000);
+      const missedUnseen = (e.status==='unanswered' && !mine && !seen);
+      if(!fresh && !missedUnseen) return;            /* historical → ledger only */
+      _woven.add(e.id);
+      _weaveNote(e, mine);
+      if(!mine){ const database=_db(); if(database&&_myUid()) database.ref('conversations/'+convId+'/echoes/'+e.id+'/seenBy/'+_myUid()).set(true).catch(()=>{}); }
+    }
+    function _weaveNote(e, mine){
+      const msgs=document.getElementById('msgs'); if(!msgs) return;
+      const realm=_realm(e.type);
+      const missed = (e.status==='unanswered' && !mine);
+      const note=document.createElement('div');
+      note.className='echo-note'+(missed?' missed':'');
+      let icon='✦', txt;
+      if(e.status==='answered') txt=realm+' Call · '+_fmtDur(e.dur);
+      else if(e.status==='unanswered'){ if(mine){ txt='No answer · '+realm+' Call'; } else { icon='☄'; txt='Missed '+realm+' Call'; } }
+      else txt=realm+' Call ended';
+      note.innerHTML='<span class="echo-ic">'+icon+'</span><span>'+txt+'</span>';
+      if(missed){
+        const b=document.createElement('button'); b.className='echo-return'; b.textContent='Return ✦';
+        b.addEventListener('click', ()=>{ if(e.type==='video'){ if(window.startVideoCall)window.startVideoCall(); } else { if(window.startAudioCall)window.startAudioCall(); } });
+        note.appendChild(b);
+      }
+      msgs.appendChild(note);
+      try{ msgs.scrollTop=msgs.scrollHeight; }catch(_){}
+    }
+
+    /* ── the ledger ── */
+    function _buildLedger(){
+      if(document.getElementById('echoLedger')) return;
+      const l=document.createElement('div'); l.id='echoLedger';
+      l.innerHTML='<div class="echo-head"><button class="echo-back" id="echoBack">‹</button><span class="echo-title">Cosmic Echoes</span><span class="echo-synced">synced</span></div><div class="echo-sub">Every call leaves a trace in the cosmos — shared between you both.</div><div class="echo-list" id="echoList"></div>';
+      document.body.appendChild(l);
+      l.querySelector('#echoBack').addEventListener('click', _closeLedger);
+    }
+    function _openLedger(){
+      _buildLedger();
+      const list=document.getElementById('echoList');
+      const arr=(_cache[_cid()]||[]).slice().sort((a,b)=>b.ts-a.ts);
+      if(!arr.length){ list.innerHTML='<div class="echo-empty">No echoes yet.<br>When you call, the cosmos<br>will remember — for you both.</div>'; }
+      else {
+        list.innerHTML='';
+        arr.forEach(e=>{
+          const mine=e.callerUid===_myUid();
+          const realm=_realm(e.type);
+          const missed=(e.status==='unanswered' && !mine);
+          const dirIcon=mine?'↗':'↘';
+          let line2;
+          if(e.status==='answered') line2=(mine?'Reached out':'Received')+' · '+_fmtDur(e.dur);
+          else if(e.status==='unanswered') line2=mine?'They did not answer':'Passed unanswered';
+          else line2='Ended';
+          const row=document.createElement('div'); row.className='echo-row'+(missed?' missed':'');
+          row.innerHTML='<div class="echo-orb">'+(e.type==='video'?'📹':'📞')+'</div><div class="echo-meta"><div class="echo-line1"><span class="echo-dir">'+dirIcon+'</span> '+realm+' Call</div><div class="echo-line2">'+line2+' · '+_ago(e.ts)+'</div></div>'+(missed?'<button class="echo-call-back">'+(e.type==='video'?'📹':'📞')+'</button>':'');
+          if(missed){ row.querySelector('.echo-call-back').addEventListener('click',()=>{ _closeLedger(); if(e.type==='video'){ if(window.startVideoCall)window.startVideoCall(); } else { if(window.startAudioCall)window.startAudioCall(); } }); }
+          list.appendChild(row);
+        });
+      }
+      document.getElementById('echoLedger').classList.add('on');
+      /* mark all unseen as seen */
+      const database=_db(), uid=_myUid(), cid=_cid();
+      if(database&&uid){ (_cache[cid]||[]).forEach(e=>{ if(e.callerUid!==uid && !(e.seenBy&&e.seenBy[uid])) database.ref('conversations/'+cid+'/echoes/'+e.id+'/seenBy/'+uid).set(true).catch(()=>{}); }); }
+      _refreshDot();
+    }
+    function _closeLedger(){ const l=document.getElementById('echoLedger'); if(l) l.classList.remove('on'); }
+
+    /* ── unseen star on the 📞 icon ── */
+    function _refreshDot(){
+      const ic=document.getElementById('ctbAudio'); if(!ic) return;
+      const uid=_myUid();
+      const unseen=(_cache[_cid()]||[]).some(e=> e.status==='unanswered' && e.callerUid!==uid && !(e.seenBy&&uid&&e.seenBy[uid]));
+      let dot=ic.querySelector('.echo-dot');
+      if(unseen && !dot){ dot=document.createElement('span'); dot.className='echo-dot'; ic.appendChild(dot); }
+      else if(!unseen && dot){ dot.remove(); }
+    }
+
+    /* ── long-press 📞 → ledger ── */
+    function _wireIcon(){
+      const ic=document.getElementById('ctbAudio'); if(!ic||ic.dataset.echo) return;
+      ic.dataset.echo='1';
+      let t=null, longed=false;
+      const start=()=>{ longed=false; t=setTimeout(()=>{ longed=true; _openLedger(); }, 550); };
+      const cancel=()=>{ if(t) clearTimeout(t); };
+      ic.addEventListener('touchstart', start, {passive:true});
+      ic.addEventListener('touchend', cancel);
+      ic.addEventListener('mousedown', start);
+      ic.addEventListener('mouseup', cancel);
+      ic.addEventListener('mouseleave', cancel);
+      ic.addEventListener('click', e=>{ if(longed){ e.stopPropagation(); e.preventDefault(); longed=false; } }, true);
+    }
+    window._echoes = { open:_openLedger };
+
+    /* ── wrap the engine: only the CALLER writes the canonical echo ── */
+    function _wrap(){
+      if(!window._sce || window._sce.__echoes) return false;
+      const eng=window._sce; eng.__echoes=true;
+      const _hangup=eng.hangup;
+      eng.hangup=function(){
+        try{
+          const S=eng.S;
+          if(S && S.role==='caller'){
+            const connected=S.startTime>0;
+            _writeEcho({ type:S.type, status:connected?'answered':'unanswered', dur:connected?(Date.now()-S.startTime)/1000:0, convId:S.convId });
+          }
+        }catch(_){}
+        return _hangup.apply(this, arguments);
+      };
+      return true;
+    }
+
+    /* ── boot: wire icon, wrap engine, follow conversation switches (cheap string compare) ── */
+    setInterval(()=>{ _wireIcon(); _wrap(); const c=_cid(); if(c && c!==_curConv) _attach(c); }, 2500);
+
+    console.log('%cSpurana ✦ Cosmic Echoes — synced between both souls',
+      'background:linear-gradient(135deg,#7C3AED,#E2C28A);color:#1a0a14;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Shared call history in the cosmos · caller writes, both souls see · missed calls glow & return the light');
+  })();
+
+
 
 
 

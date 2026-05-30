@@ -38524,6 +38524,94 @@ html.low-battery::before{ content: none !important; display: none !important; }
     console.log('  Shared call history in the cosmos · caller writes, both souls see · missed calls glow & return the light');
   })();
 
+  /* ╔════════════════════════════════════════════════════════════════╗
+     ║  CALL SINGULARITY — one call UI, one engine, no conflict      ║
+     ║                                                                ║
+     ║  The app carried TWO call systems: the legacy #rtcCall (with   ║
+     ║  its CosmicCallExperience overlay) and the new Sacred Call     ║
+     ║  (#sceCall). Both were rendering — doubled, overlapping        ║
+     ║  controls — and both ran WebRTC, fighting over the mic and     ║
+     ║  signalling, which dropped the call.                           ║
+     ║                                                                ║
+     ║  This makes the Sacred Call engine the ONLY one:               ║
+     ║   · the legacy call UI can never be shown (hidden + no-op'd)   ║
+     ║   · every call entry point routes to the one engine           ║
+     ║   · the control bar is a single clean WhatsApp-like row        ║
+     ╚════════════════════════════════════════════════════════════════╝ */
+  (function CallSingularity(){
+    'use strict';
+
+    if(!document.getElementById('callSingularityStyles')){
+      const s=document.createElement('style'); s.id='callSingularityStyles';
+      s.textContent = `
+/* the legacy call UIs can NEVER appear again */
+#rtcCall, #rtcIncoming, #incomingCall{ display:none !important; }
+
+/* one clean control row (WhatsApp-like), never wraps or overflows */
+#sceControls{ flex-wrap:nowrap !important; }
+#sceControls .sce-ctl[style*="display: none"],
+#sceControls .sce-ctl[style*="display:none"]{ display:none !important; }
+      `;
+      document.head.appendChild(s);
+    }
+
+    /* route every call entry point to the single Sacred engine,
+       and make the legacy engine + UI inert */
+    function _enforce(){
+      const has = !!window._sce;
+      if(has){
+        window.startAudioCall = function(){ window._sce.startCall('audio'); };
+        window.startVideoCall = function(){ window._sce.startCall('video'); };
+        window.startRealCall  = function(t){ window._sce.startCall(t==='video'?'video':'audio'); };
+        window._rtcHangup     = function(){ window._sce.hangup(); };
+        window.endCall        = function(){ window._sce.hangup(); };
+        window.endVideoCall   = function(){ window._sce.hangup(); };
+      }
+      /* legacy UI openers become no-ops so #rtcCall can never be revealed */
+      window._showRtcUI = function(){};
+      if(typeof window._showIncomingCall === 'function') window._showIncomingCall = function(){};
+      /* belt + suspenders: force-hide legacy nodes if any code flipped them */
+      ['rtcCall','rtcIncoming','incomingCall'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(el){ el.style.display='none'; if(el.classList){ el.classList.remove('on','active','cc-video'); } }
+      });
+      return has;
+    }
+
+    /* de-dupe the control bar defensively (one button per id, kill orphans) */
+    function _cleanControls(){
+      const c=document.getElementById('sceControls'); if(!c) return;
+      const seen={};
+      Array.from(c.children).forEach(b=>{
+        const id=b.id;
+        if(id){ if(seen[id]){ b.remove(); } else seen[id]=1; }
+      });
+    }
+
+    let _t=0;
+    const _it=setInterval(()=>{
+      _t++;
+      const ok=_enforce();
+      _cleanControls();
+      if((ok && _t>6) || _t>80) clearInterval(_it);
+    }, 350);
+    _enforce();
+
+    /* if a legacy node ever gets shown later, snap it back to hidden — cheap, attribute-scoped */
+    try{
+      const legacy=document.getElementById('rtcCall');
+      if(legacy && window.MutationObserver){
+        new MutationObserver(()=>{ if(legacy.style.display!=='none') legacy.style.display='none'; })
+          .observe(legacy, { attributes:true, attributeFilter:['style','class'] });
+      }
+    }catch(_){}
+
+    console.log('%cSpurana ✦ Call Singularity — one engine, one clean UI',
+      'background:linear-gradient(135deg,#DC2626,#7C3AED);color:#fff;padding:4px 12px;border-radius:6px;font-family:monospace;font-weight:bold;font-size:11px');
+    console.log('  Legacy #rtcCall retired · all calls route to the Sacred engine · controls de-duplicated');
+  })();
+
+
 
 
 

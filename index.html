@@ -27691,7 +27691,7 @@ button:focus:not(:focus-visible) {
 
     const VERSION = 'Beta Green L 1';
     const VERSION_SHORT = 'BGL1';
-    const BUILD = 'beta-green-l1-mobile';
+    const BUILD = 'callfix2';
     const COMPANY = 'OJOS ROJOS INC';
     const DEDICATION_DATE = '2026';
 
@@ -27938,7 +27938,7 @@ button:focus:not(:focus-visible) {
       const el = document.createElement('div');
       el.id = 'bgFloatingVersion';
       el.className = 'bg-floating-version';
-      el.textContent = VERSION_SHORT;
+      el.textContent = VERSION_SHORT + ' · ' + BUILD;
       el.setAttribute('aria-hidden', 'true');
       document.body.appendChild(el);
     }
@@ -38570,11 +38570,14 @@ html.low-battery::before{ content: none !important; display: none !important; }
       /* legacy UI openers become no-ops so #rtcCall can never be revealed */
       window._showRtcUI = function(){};
       if(typeof window._showIncomingCall === 'function') window._showIncomingCall = function(){};
-      /* belt + suspenders: force-hide legacy nodes if any code flipped them */
+      /* belt + suspenders: force-hide legacy nodes with INLINE !important
+         (beats any inline display:flex the old code sets), and physically
+         remove the legacy/cosmic control bars so they can never overlap */
       ['rtcCall','rtcIncoming','incomingCall'].forEach(id=>{
         const el=document.getElementById(id);
-        if(el){ el.style.display='none'; if(el.classList){ el.classList.remove('on','active','cc-video'); } }
+        if(el){ el.style.setProperty('display','none','important'); if(el.classList){ el.classList.remove('on','active','cc-video','cc-hide-ui'); } }
       });
+      document.querySelectorAll('.rtc-controls, #ccControls, #ccTopBar').forEach(el=>{ try{ el.remove(); }catch(_){ el.style.setProperty('display','none','important'); } });
       return has;
     }
 
@@ -38601,7 +38604,7 @@ html.low-battery::before{ content: none !important; display: none !important; }
     try{
       const legacy=document.getElementById('rtcCall');
       if(legacy && window.MutationObserver){
-        new MutationObserver(()=>{ if(legacy.style.display!=='none') legacy.style.display='none'; })
+        new MutationObserver(()=>{ if(legacy.style.display!=='none') legacy.style.setProperty('display','none','important'); })
           .observe(legacy, { attributes:true, attributeFilter:['style','class'] });
       }
     }catch(_){}

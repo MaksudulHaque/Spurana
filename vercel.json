@@ -1,5 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node build.mjs",
+  "outputDirectory": "www",
   "cleanUrls": true,
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "headers": [{

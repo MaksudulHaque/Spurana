@@ -1,0 +1,13 @@
+# dependencies (Vercel reinstalls from package.json)
+node_modules/
+
+# vercel local link
+.vercel/
+
+# os junk
+*.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*

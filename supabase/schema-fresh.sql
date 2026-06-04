@@ -1,3 +1,22 @@
+-- SPURANA · schema-fresh.sql — run ONCE in Supabase SQL Editor.
+-- Drops the app tables so columns match the code exactly, then rebuilds
+-- with full RLS. Does NOT touch auth.users (logins stay). Pre-launch: safe.
+drop table if exists public.pair_codes      cascade;
+drop table if exists public.activity_log    cascade;
+drop table if exists public.cp_logs          cascade;
+drop table if exists public.hc_logs          cascade;
+drop table if exists public.unread           cascade;
+drop table if exists public.typing           cascade;
+drop table if exists public.presence         cascade;
+drop table if exists public.soul_card        cascade;
+drop table if exists public.listen_session   cascade;
+drop table if exists public.watch_session    cascade;
+drop table if exists public.rtc_signals      cascade;
+drop table if exists public.messages         cascade;
+drop table if exists public.conversations    cascade;
+drop table if exists public.contacts         cascade;
+drop table if exists public.profiles         cascade;
+
 -- ============================================================
 -- SPURANA · schema.sql  (canonical — matches the app code exactly)
 -- Conversation id = the two user ids sorted + joined with "_".

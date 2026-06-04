@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     // 2) delete their data + auth row using the server-only key
     const admin = createClient(url, service);
     await admin.from("messages").delete().eq("uid", uid);
-    await admin.from("contacts").delete().eq("uid", uid);
+    await admin.from("contacts").delete().eq("owner_uid", uid);
     await admin.from("hc_logs").delete().eq("uid", uid);
     await admin.from("cp_logs").delete().eq("uid", uid);
     await admin.from("activity_log").delete().eq("uid", uid);

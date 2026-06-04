@@ -43,7 +43,10 @@ window.Weather = (function () {
     document.documentElement.setAttribute("data-weather", kind);
   }
   async function refresh() { if (!on) return; const k = await fetchKind(); paint(k); }
+  // one-shot preview for the login (alive regardless of the saved toggle)
+  async function once() { try { const k = await fetchKind(); paint(k); return k; } catch (e) { return null; } }
+  function clearPreview() { if (!on) { remove(); document.documentElement.removeAttribute("data-weather"); } }
   function enable(v) { on = v; try { localStorage.setItem(KEY, v ? "1" : "0"); } catch (e) {} if (v) refresh(); else { remove(); document.documentElement.removeAttribute("data-weather"); } }
   function init() { try { on = localStorage.getItem(KEY) === "1"; } catch (e) {} if (on) refresh(); }
-  return { enable, refresh, isOn: () => on, init };
+  return { enable, refresh, isOn: () => on, init, once, clearPreview };
 })();

@@ -89,10 +89,35 @@
       H.el("div", { class: "brand-soul" }, CFG.TAGLINE),
       H.el("div", { class: "soul-card" }, [H.el("div", { class: "soul-tabs" }, [tabIn, tabReg]), H.el("div", null, form)]),
       H.el("div", { class: "nwp-credit" }, "NWP \u00b7 Sacred Architecture \u00b7 v6 \u00b7 2026"),
+      H.el("div", { class: "invite-hint", style: "margin-top:6px" }, [H.el("em", { onClick: function () { Router.go("privacy"); } }, "Privacy & Consent")]),
     ]);
     root.appendChild(H.el("div", { class: "awaken-screen" }, wrap));
-    return {};
+    // keep the login alive with her real local weather (rain/snow), nothing else changed
+    try { if (window.Weather && Weather.once) Weather.once(); } catch (e) {}
+    return { teardown: function () { try { if (window.Weather && Weather.clearPreview) Weather.clearPreview(); } catch (e) {} } };
   };
+
+  // Privacy & Consent — reachable from the login footer
+  Router.register("privacy", function (root) {
+    root.appendChild(topBar({ title: "Privacy & Consent", back: true, home: "login" }));
+    var body = H.el("div", { class: "pad scroll grow reveal" });
+    function para(t) { return H.el("p", { style: "margin:0 0 14px;line-height:1.65;color:var(--text-dim);font-size:14px" }, t); }
+    function head(t) { return H.el("div", { class: "s-section", style: "padding-left:0;color:var(--gold)" }, t); }
+    body.append(
+      H.el("div", { style: "font-family:var(--f-soul);font-size:23px;color:var(--text);margin-bottom:8px" }, "Your privacy, simply."),
+      para(CFG.CONSENT_SHORT),
+      head("What we store"),
+      para("Your email, the name and avatar you choose, and the messages, voice notes, and activities you share with your bonded partner. Nothing more."),
+      head("Who can see it"),
+      para("Only you and the one soul you bond with. Your conversation is protected at the database level, so no other user can read it. We never sell your data and never show ads."),
+      head("Your control"),
+      para("You can export or permanently delete everything at any time from Settings \u2192 The Keeper. Deleting your account removes your profile, messages, and shared data for good."),
+      head("Beta"),
+      para("Spurana is an early beta. Things may change, break, or be reset \u2014 please don\u2019t keep anything here you can\u2019t afford to lose yet.")
+    );
+    root.appendChild(body);
+    return {};
+  });
 
   function consentRow(box) {
     return H.el("label", { class: "soul-consent" }, [box, H.el("span", null, [

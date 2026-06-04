@@ -86,6 +86,9 @@
   ];
 
   Router.register("sanctuary", function (root) {
+    try { document.documentElement.setAttribute("data-screen", "sanctuary"); } catch (e) {}
+    // freeze the cosmic canvas → a still, faded frame (smooth scroll, no per-frame filtering)
+    try { if (window._cosmicRaf) { cancelAnimationFrame(window._cosmicRaf); window._cosmicRaf = null; } } catch (e) {}
     const head = H.el("div", { class: "sanctuary-head" }, [
       H.el("div", { class: "s-eyebrow" }, "The Sanctuary"),
       H.el("div", { class: "s-wordmark" }, "Where shall you go?"),
@@ -96,11 +99,10 @@
 
     SECTIONS.forEach(([label, tiles]) => {
       scroll.appendChild(H.el("div", { class: "s-section" }, label));
-      const tint = TINT[label] || "232,0,154";
       const grid = H.el("div", { class: "s-grid" });
       tiles.forEach(([icon, title, sub, fn]) => {
         grid.appendChild(H.el("button", { class: "s-tile", onClick: fn }, [
-          H.el("div", { class: "s-ico", style: "background:radial-gradient(circle at 40% 30%,rgba(" + tint + ",0.34),rgba(" + tint + ",0.10));border-color:rgba(" + tint + ",0.32)" }, icon),
+          H.el("div", { class: "s-ico" }, icon),
           H.el("div", { class: "s-title" }, title),
           sub ? H.el("div", { class: "s-tsub" }, sub) : null,
         ]));
@@ -108,6 +110,6 @@
       scroll.appendChild(grid);
     });
     scroll.appendChild(H.el("div", { class: "nwp-credit", style: "padding:24px 0 40px" }, "NWP \u00b7 Sacred Architecture \u00b7 v6 \u00b7 2026"));
-    return {};
+    return { teardown: function () { try { document.documentElement.removeAttribute("data-screen"); if (window.startCosmos && !window._cosmicRaf) window.startCosmos(); } catch (e) {} } };
   });
 })();

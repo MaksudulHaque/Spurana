@@ -60,6 +60,9 @@
   })();
   window.MedVoice = MedVoice;
 
+  /* ── default gentle continuation murmurs (used when a practice gives none) ── */
+  var DEF_MUR = ["Stay with it.", "Nothing to do now.", "Let the breath be easy.", "Softening, with each breath.", "Just here. Just this.", "Let yourself be held.", "Let go a little more.", "There is nowhere else to be."];
+
   /* ── soft bell (gentle sine, no dependency on ambient) ── */
   function bell() {
     try {
@@ -133,6 +136,7 @@
     var sound = opts.sound || "cosmos";
     var silence = !!opts.silence;
     var basePhases = opts.phases || [];
+    var murmurs = (opts.murmurs && opts.murmurs.length) ? opts.murmurs : DEF_MUR;
 
     var wrap = H.el("div", { class: "guide-wrap grow" });
     root.appendChild(wrap);
@@ -177,15 +181,16 @@
                           : H.el("div", { class: "guide-fig", html: figureSVG() });
     var orb = H.el("div", { class: "guide-orb" }, orbInner);
     var ring = H.el("div", { class: "guide-ring" }, orb);
+    var breathLabel = H.el("div", { class: "guide-breath" }, "");
     var phaseText = H.el("div", { class: "guide-text" }, "");
     var qText = H.el("div", { class: "guide-q" }, "");
     var clock = H.el("div", { class: "guide-clock" }, "");
     var endBtn = H.el("button", { class: "sacred-btn ghost", onClick: function () { endSession(false); } }, "End \u2726");
     if (stageName) session.appendChild(stageName);
-    session.append(ring, phaseText, qText, clock, H.el("div", { class: "pad" }, endBtn));
+    session.append(ring, breathLabel, phaseText, qText, clock, H.el("div", { class: "pad" }, endBtn));
     wrap.appendChild(session);
 
-    var running = false, idx = 0, stepT = null, tickT = null, started = 0, remain = 0, total = 0;
+    var running = false, idx = 0, stepT = null, tickT = null, started = 0, remain = 0, total = 0, murT = null;
     var fxRaf = null, fxT0 = 0, curIdx = 0, fxCtx = null;
 
     function fmt(s) { var m = Math.floor(s / 60), x = s % 60; return m + ":" + (x < 10 ? "0" : "") + x; }
@@ -219,20 +224,42 @@
         if (remain <= 0) endSession(true);
       }, 1000);
       clock.textContent = fmt(remain);
-      if (silence) { phaseText.textContent = "Just sit. Be the silence."; MedVoice.speak("Let us simply sit. Nothing to do now. Only to be here, softly, with yourself."); breathe(true); }
+      startPacer(opts.breath || [4, 1, 6, 1]);
+      if (silence) { phaseText.textContent = "Just sit. Be the silence."; MedVoice.speak("Let us simply sit. Nothing to do now. Only to be here, softly, with yourself, breathing."); }
       else { idx = 0; runPhase(scalePhases(basePhases, chosen)); }
     }
 
-    function breathe(loop) {                                    // glowing figure inhale/exhale
-      if (!running) return;
-      orb.style.transition = "transform 4s ease-in-out, filter 4s ease-in-out";
-      orb.style.transform = "scale(1.18)"; orb.style.filter = "brightness(1.25)";
-      setTimeout(function () { if (!running) return; orb.style.transform = "scale(0.86)"; orb.style.filter = "brightness(0.9)"; }, 4200);
-      if (loop) { var t = setTimeout(function () { breathe(true); }, 8600); }
+    // ── continuous breath pacer: the guide breathes WITH you the whole time ──
+    var pacerOn = false, pacerT = null, pace = [4, 1, 6, 1];   // in, hold, out, hold (seconds)
+    function glow() { var c = (stages && (stages[Math.min(curIdx, stages.length - 1)] || {}).color) || "#E8009A"; return " drop-shadow(0 0 28px " + c + ")"; }
+    function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+    function breathStep(phase) {
+      if (!running || !pacerOn) return;
+      var inS = pace[0], hold1 = pace[1], outS = pace[2], hold2 = pace[3];
+      if (phase === 0) {                                        // inhale
+        breathLabel.textContent = "breathe in";
+        orb.style.transition = "transform " + inS + "s cubic-bezier(.4,0,.2,1), filter " + inS + "s ease-in-out";
+        orb.style.transform = "scale(1.2)"; orb.style.filter = "brightness(1.3)" + glow(); buzz(12);
+        pacerT = setTimeout(function () { breathStep(1); }, inS * 1000);
+      } else if (phase === 1) {                                 // hold (full)
+        if (hold1 > 0.4) breathLabel.textContent = "hold";
+        pacerT = setTimeout(function () { breathStep(2); }, hold1 * 1000);
+      } else if (phase === 2) {                                 // exhale
+        breathLabel.textContent = "breathe out";
+        orb.style.transition = "transform " + outS + "s cubic-bezier(.4,0,.2,1), filter " + outS + "s ease-in-out";
+        orb.style.transform = "scale(0.84)"; orb.style.filter = "brightness(0.92)" + glow(); buzz(7);
+        pacerT = setTimeout(function () { breathStep(3); }, outS * 1000);
+      } else {                                                  // hold (empty)
+        if (hold2 > 0.4) breathLabel.textContent = "rest";
+        pacerT = setTimeout(function () { breathStep(0); }, hold2 * 1000);
+      }
     }
+    function startPacer(p) { if (p) pace = p; if (pacerOn) return; pacerOn = true; breathStep(0); }
+    function stopPacer() { pacerOn = false; clearTimeout(pacerT); breathLabel.textContent = ""; }
 
     function runPhase(phases) {
       if (!running) return;
+      clearTimeout(murT);
       if (idx >= phases.length) return;                          // timer ends the session
       var ph = phases[idx], text = ph[0], secs = ph[1], voice = ph[2] || text, q = ph[3] || "";
       if (stages) {
@@ -247,15 +274,27 @@
       phaseText.style.opacity = "0";
       setTimeout(function () { phaseText.textContent = text; phaseText.style.opacity = "1"; qText.textContent = q; }, 320);
       MedVoice.speak(voice);
-      breathe(false);
-      orb.style.transition = "transform " + Math.min(6, secs) + "s ease-in-out";
-      orb.style.transform = idx % 2 ? "scale(0.9)" : "scale(1.12)";
-      stepT = setTimeout(function () { idx++; if (idx < phases.length) runPhase(phases); }, secs * 1000);
+      buzz(18);                                                  // a soft pulse as each beat arrives
+      // weave gentle, purpose-specific continuation through long gaps (so longer sessions stay guided)
+      clearInterval(murT);
+      if (secs > 26) {
+        var pool = murmurs.slice();
+        for (var z = pool.length - 1; z > 0; z--) { var w = (Math.random() * (z + 1)) | 0, tmp = pool[z]; pool[z] = pool[w]; pool[w] = tmp; }
+        var mi = 0, gap = 22, endGuard = 7;                      // a murmur ~every 22s, none in the final 7s
+        var firstAt = 16;                                        // first murmur 16s in (after the main line lands)
+        murT = setTimeout(function tick() {
+          if (!running) return;
+          MedVoice.speak(pool[mi % pool.length]); buzz(6); mi++;
+          var left = Math.max(0, (idx < phases.length ? secs : 0));
+          murT = setTimeout(tick, gap * 1000);
+        }, firstAt * 1000);
+      }
+      stepT = setTimeout(function () { idx++; clearInterval(murT); clearTimeout(murT); if (idx < phases.length) runPhase(phases); }, secs * 1000);
     }
 
     function endSession(done) {
       if (!running) return; running = false;
-      clearTimeout(stepT); clearInterval(tickT);
+      clearTimeout(stepT); clearInterval(tickT); clearTimeout(murT); stopPacer();
       if (fxRaf && window.cancelAnimationFrame) cancelAnimationFrame(fxRaf);
       MedVoice.cancel();
       if (done) { bell(); setTimeout(bell, 900); }
@@ -277,7 +316,7 @@
     // expose question setter for journeys
     mount._setQuestion = function (q) { qText.textContent = q || ""; };
 
-    return { teardown: function () { running = false; clearTimeout(stepT); clearInterval(tickT); if (fxRaf && window.cancelAnimationFrame) cancelAnimationFrame(fxRaf); MedVoice.cancel(); } };
+    return { teardown: function () { running = false; clearTimeout(stepT); clearInterval(tickT); clearTimeout(murT); stopPacer(); if (fxRaf && window.cancelAnimationFrame) cancelAnimationFrame(fxRaf); MedVoice.cancel(); } };
   }
 
   window.Guide = { mount: mount, voice: MedVoice, figureSVG: figureSVG, mandalaSVG: mandalaSVG, bell: bell };

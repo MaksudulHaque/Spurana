@@ -40,7 +40,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
 h1,h2,h3{font-family:var(--f-sacred);font-weight:600;line-height:1.1;margin:0}
 a{color:var(--q-bright);text-decoration:none}
 .muted{color:var(--text-dim)}.faint{color:var(--text-ghost)}.center{text-align:center}
-.grow{flex:1}.scroll{overflow-y:auto;-webkit-overflow-scrolling:touch}
+.grow{flex:1;min-height:0}.scroll{overflow-y:auto;-webkit-overflow-scrolling:touch}
 .row{display:flex;align-items:center;gap:12px}.spread{justify-content:space-between}.hidden{display:none!important}
 .stack>*+*{margin-top:12px}
 
@@ -188,12 +188,10 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;bac
 [data-perf="lite"] body::after{background:radial-gradient(125% 100% at 50% 42%, transparent 60%, rgba(0,0,0,.35))}
 
 /* ──────── performance: isolate repeated boxes so the browser repaints less ──────── */
-.card,.zone-card,.s-tile,.tl-item,.rem-row,.wx-mood,.mem-cell,.vault-card,.letter{contain:layout paint}
-.scroll{contain:paint;overscroll-behavior:contain}
 
 /* ════════ Smooth touch + scroll ════════ */
 .icon-btn,.soul-tab,.tg{touch-action:manipulation}
 .s-tile,.zone-card,.btn,.sacred-btn,.wx-mood,.mem-cell{touch-action:pan-y}
-.scroll{touch-action:pan-y;will-change:scroll-position}
+.scroll{touch-action:pan-y}
 .s-tile{transition:transform .12s ease,border-color .16s ease,box-shadow .16s ease}
 .s-tile:active{transform:scale(.97);border-color:var(--q-bright);box-shadow:0 0 18px var(--q-glow)}

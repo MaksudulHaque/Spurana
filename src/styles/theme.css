@@ -20,7 +20,7 @@
   --glow-q-sm:0 0 16px rgba(232,0,154,0.4);
   --shadow:0 8px 40px rgba(0,0,0,0.7);--shadow-sm:0 4px 20px rgba(0,0,0,0.5);
   --t:all 0.18s cubic-bezier(0.4,0,0.2,1);--t-slow:all 0.42s cubic-bezier(0.4,0,0.2,1);
-  --maxw:520px;--tap:48px;--gutter:18px;--blur:16px;
+  --maxw:520px;--tap:48px;--gutter:18px;--blur:10px;
   --sat-top:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -115,6 +115,9 @@ a{color:var(--q-bright);text-decoration:none}
 [data-perf="lite"] body::before{display:none}
 [data-perf="lite"] .soul-card{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(10,7,16,0.96)}
 [data-perf="lite"] .bar{backdrop-filter:none;-webkit-backdrop-filter:none}
+/* speed: grain is costly with mix-blend; cheapen it off the High tier */
+html[data-perf="balanced"] body::before{mix-blend-mode:normal;opacity:.30}
+html[data-perf="lite"] body::before{display:none}
 [data-perf="lite"] .logo-cosmos svg,[data-perf="lite"] .logo-orbit,[data-perf="lite"] .logo-orbit-2,[data-perf="lite"] .awakening-wrap{animation:none!important}
 [data-perf="lite"] .reveal>*{animation:none!important;opacity:1;transform:none}
 [data-perf="lite"] .msg{animation:none}

@@ -26,7 +26,7 @@
       if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return "lite";
       const mem = navigator.deviceMemory || 4;
       const cores = navigator.hardwareConcurrency || 4;
-      if (mem <= 2 || cores <= 2) return "lite";
+      if (mem <= 3 || cores <= 2) return "lite";
     } catch (e) {}
     return "balanced"; // safe, cool default; High is opt-in.
   }

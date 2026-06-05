@@ -53,6 +53,7 @@ const JS = [
   "world/backdrop.js",
   "world/timeworld.js",
   "world/weather.js",
+  "sanctuary/icons.js",
   "sanctuary/hub.js",
   "remember/keepsakes.js",
   "reflect/reflect.js",

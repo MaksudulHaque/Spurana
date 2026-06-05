@@ -101,8 +101,10 @@
       scroll.appendChild(H.el("div", { class: "s-section" }, label));
       const grid = H.el("div", { class: "s-grid" });
       tiles.forEach(([icon, title, sub, fn]) => {
+        const ic = H.el("div", { class: "s-ico" });
+        if (window.ICONS && window.ICONS[title]) ic.innerHTML = window.ICONS[title]; else ic.textContent = icon;
         grid.appendChild(H.el("button", { class: "s-tile", onClick: fn }, [
-          H.el("div", { class: "s-ico" }, icon),
+          ic,
           H.el("div", { class: "s-title" }, title),
           sub ? H.el("div", { class: "s-tsub" }, sub) : null,
         ]));

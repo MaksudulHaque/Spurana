@@ -22,7 +22,7 @@
   window.topBar = function (opts) {
     const o = opts || {};
     const left = o.back
-      ? H.el("button", { class: "icon-btn", title: "Back", onClick: () => { if (o.home) Router.go(o.home); else if (window.history && history.length > 1) history.back(); else Router.go("sanctuary"); } }, "\u2039")
+      ? H.el("button", { class: "icon-btn", title: "Back", onClick: () => { if (o.home) Router.go(o.home); else if (window.history && history.length > 1) history.back(); else Router.go("self"); } }, "\u2039")
       : H.el("div", { class: "icon-btn", title: APP.profile && APP.profile.name }, H.initials(APP.profile && APP.profile.name));
     const kids = [left, H.el("div", { class: "title" }, o.title || CFG.APP_NAME)];
     if (o.action) kids.push(H.el("button", { class: "icon-btn", title: o.action.title || "", onClick: o.action.onClick }, o.action.icon));

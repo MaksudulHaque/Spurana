@@ -170,6 +170,7 @@ setTimeout(() => {
   try { win.Router.go("learn"); ok.push(["Spiritual Learning renders", findClass(appRoot, "learn-body")]); } catch (e) { ok.push(["learn (threw: " + e.message + ")", false]); }
 
   // sanctuary hub (the launcher / home)
+  try { win.Router.go("self"); ok.push(["Dashboard of Self renders", findClass(appRoot, "dash-hero") && findClass(appRoot, "dash-clock")]); } catch (e) { ok.push(["self (threw: " + e.message + ")", false]); }
   try { win.Router.go("sanctuary"); ok.push(["Sanctuary hub renders", findClass(appRoot, "s-grid") && findClass(appRoot, "s-tile")]); } catch (e) { ok.push(["sanctuary (threw: " + e.message + ")", false]); }
 
   // REMEMBER keepsakes

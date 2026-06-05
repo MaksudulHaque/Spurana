@@ -63,6 +63,7 @@ const JS = [
   "connect/extras.js",
   "oracle/oracle.js",
   "divine/divine.js",
+  "dash/self.js",
   "core/boot.js",       // entry point — last
 ];
 

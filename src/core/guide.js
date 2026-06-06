@@ -19,49 +19,109 @@
   /* ── MedVoice: warm narration (Her / Him), persisted ── */
   var MedVoice = (function () {
     var KEY = "spurana.guidevoice";
-    var st = { on: true, gender: "her" };
-    try { var s = JSON.parse(localStorage.getItem(KEY) || "{}"); if (typeof s.on === "boolean") st.on = s.on; if (s.gender) st.gender = s.gender; } catch (e) {}
+    var st = { on: true, gender: "her", voiceURI: "", haptic: true, hq: true };
+    try { var s = JSON.parse(localStorage.getItem(KEY) || "{}"); if (typeof s.on === "boolean") st.on = s.on; if (s.gender) st.gender = s.gender; if (s.voiceURI) st.voiceURI = s.voiceURI; if (typeof s.haptic === "boolean") st.haptic = s.haptic; if (typeof s.hq === "boolean") st.hq = s.hq; } catch (e) {}
     function save() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }
     var voices = [];
     function refresh() { try { voices = (window.speechSynthesis && speechSynthesis.getVoices()) || []; } catch (e) { voices = []; } }
     if (window.speechSynthesis) { refresh(); try { speechSynthesis.onvoiceschanged = refresh; } catch (e) {} }
-    var HER = ["samantha", "victoria", "karen", "tessa", "moira", "fiona", "serena", "allison", "ava", "susan", "zira", "female", "google uk english female", "google us english"];
-    var HIM = ["daniel", "alex", "fred", "tom", "oliver", "rishi", "male", "google uk english male"];
-    function pick() {
+    // prefer the most natural engines a device may have
+    var QUALITY = ["natural", "neural", "enhanced", "premium", "online", "google", "siri"];
+    var HER = ["samantha", "victoria", "karen", "tessa", "moira", "fiona", "serena", "allison", "ava", "susan", "zira", "aria", "jenny", "female", "google uk english female", "google us english"];
+    var HIM = ["daniel", "alex", "fred", "tom", "oliver", "rishi", "guy", "male", "google uk english male"];
+    function score(v, want) {
+      var n = (v.name || "").toLowerCase(), sc = 0, i;
+      for (i = 0; i < QUALITY.length; i++) if (n.indexOf(QUALITY[i]) !== -1) { sc += 6; break; }
+      for (i = 0; i < want.length; i++) if (n.indexOf(want[i]) !== -1) { sc += (want.length - i); break; }
+      if (v.localService) sc += 1;
+      return sc;
+    }
+    function isBangla(t) { return /[\u0980-\u09FF]/.test(t || ""); }
+    function pickEn() {
       if (!voices.length) refresh();
-      var want = st.gender === "him" ? HIM : HER;
       var en = voices.filter(function (v) { return v.lang && /^en/i.test(v.lang); });
-      for (var i = 0; i < want.length; i++) {
-        var hit = en.find(function (v) { return v.name && v.name.toLowerCase().indexOf(want[i]) !== -1; });
-        if (hit) return hit;
-      }
+      if (st.voiceURI) { var ov = en.find(function (v) { return v.voiceURI === st.voiceURI; }); if (ov) return ov; }
+      var want = st.gender === "him" ? HIM : HER;
+      en.sort(function (a, b) { return score(b, want) - score(a, want); });
       return en[0] || voices[0] || null;
     }
-    function speak(text) {
+    function pickBn() {
+      if (!voices.length) refresh();
+      var bn = voices.filter(function (v) { return v.lang && /^bn/i.test(v.lang); });
+      bn.sort(function (a, b) { return score(b, HER) - score(a, HER); });
+      return bn[0] || null;
+    }
+    function deviceSpeak(text) {
       if (!st.on || !text || !window.speechSynthesis) return;
       try {
         speechSynthesis.cancel();
         var u = new SpeechSynthesisUtterance(text);
-        var v = pick(); if (v) u.voice = v;
-        u.rate = 0.76;                                  // slow, unhurried
-        u.pitch = st.gender === "him" ? 0.82 : 1.06;    // warm, intimate
-        u.volume = 0.92;
+        if (isBangla(text)) {
+          var bv = pickBn();
+          if (bv) { u.voice = bv; u.lang = bv.lang; } else { u.lang = "bn-IN"; }   // device Bangla voice
+          u.rate = 0.84; u.pitch = 1.0;
+        } else {
+          var v = pickEn(); if (v) { u.voice = v; u.lang = v.lang; }
+          u.rate = 0.76;
+          u.pitch = st.gender === "him" ? 0.82 : 1.06;
+        }
+        u.volume = 0.94;
         speechSynthesis.speak(u);
       } catch (e) {}
     }
-    function cancel() { try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {} }
+    // ── high-quality voice via the secure `tts` Edge Function (Google Cloud TTS).
+    //    Key lives server-side; client only gets audio. Falls back to the device voice. ──
+    var audioEl = null, ttsCache = {}, hqFailed = false;
+    function stopAudio() { try { if (audioEl) { audioEl.pause(); audioEl.removeAttribute("src"); audioEl.load(); } } catch (e) {} }
+    function playB64(b64) {
+      try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+      stopAudio();
+      if (!audioEl) { audioEl = new Audio(); audioEl.preload = "auto"; }
+      audioEl.src = "data:audio/mp3;base64," + b64; audioEl.volume = 0.96;
+      var pr = audioEl.play(); if (pr && pr.catch) pr.catch(function () {});
+    }
+    function speakRemote(text) {
+      var lang = isBangla(text) ? "bn" : "en";
+      var ck = st.gender + "|" + text;
+      if (ttsCache[ck]) { playB64(ttsCache[ck]); return; }
+      try {
+        window.SP._sb.functions.invoke("tts", { body: { text: text, lang: lang, gender: st.gender } })
+          .then(function (res) {
+            var d = res && res.data, b64 = d && d.audio;
+            if ((res && res.error) || !b64) { hqFailed = true; deviceSpeak(text); return; }
+            ttsCache[ck] = b64; playB64(b64);
+          })
+          .catch(function () { hqFailed = true; deviceSpeak(text); });
+      } catch (e) { hqFailed = true; deviceSpeak(text); }
+    }
+    function speak(text) {
+      if (!st.on || !text) return;
+      if (st.hq && !hqFailed && window.SP && window.SP._sb) speakRemote(text);
+      else deviceSpeak(text);
+    }
+    function cancel() { stopAudio(); try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {} }
     return {
       speak: speak, cancel: cancel,
       isOn: function () { return st.on; },
       gender: function () { return st.gender; },
       setOn: function (b) { st.on = b; save(); if (!b) cancel(); },
-      setGender: function (g) { st.gender = g; save(); },
+      setGender: function (g) { st.gender = g; st.voiceURI = ""; save(); },
+      haptic: function () { return st.haptic; },
+      setHaptic: function (b) { st.haptic = !!b; save(); },
+      listVoices: function () { refresh(); return voices.filter(function (v) { return v.lang && (/^en/i.test(v.lang) || /^bn/i.test(v.lang)); }).map(function (v) { return { name: v.name, uri: v.voiceURI, lang: v.lang }; }); },
+      currentVoiceURI: function () { return st.voiceURI; },
+      setVoice: function (uri) { st.voiceURI = uri || ""; save(); },
+      hasBangla: function () { return !!pickBn(); },
+      isHQ: function () { return st.hq; },
+      setHQ: function (b) { st.hq = !!b; hqFailed = false; ttsCache = {}; save(); },
     };
   })();
+  window.MedVoice = MedVoice;
   window.MedVoice = MedVoice;
 
   /* ── default gentle continuation murmurs (used when a practice gives none) ── */
   var DEF_MUR = ["Stay with it.", "Nothing to do now.", "Let the breath be easy.", "Softening, with each breath.", "Just here. Just this.", "Let yourself be held.", "Let go a little more.", "There is nowhere else to be."];
+  var DEF_MUR_BN = ["এর সাথে থাকুন।", "এখন কিছু করার নেই।", "শ্বাস সহজ হোক।", "প্রতি শ্বাসে কোমল হোন।", "শুধু এখানে। শুধু এটুকুই।", "নিজেকে ধরে রাখতে দিন।", "আরও একটু ছেড়ে দিন।"];
 
   /* ── soft bell (gentle sine, no dependency on ambient) ── */
   function bell() {
@@ -136,7 +196,7 @@
     var sound = opts.sound || "cosmos";
     var silence = !!opts.silence;
     var basePhases = opts.phases || [];
-    var murmurs = (opts.murmurs && opts.murmurs.length) ? opts.murmurs : DEF_MUR;
+    var murmurs = (opts.murmurs && opts.murmurs.length) ? opts.murmurs : ((window.LANG === "bn") ? DEF_MUR_BN : DEF_MUR);
 
     var wrap = H.el("div", { class: "guide-wrap grow" });
     root.appendChild(wrap);
@@ -225,32 +285,33 @@
       }, 1000);
       clock.textContent = fmt(remain);
       startPacer(opts.breath || [4, 1, 6, 1]);
-      if (silence) { phaseText.textContent = "Just sit. Be the silence."; MedVoice.speak("Let us simply sit. Nothing to do now. Only to be here, softly, with yourself, breathing."); }
+      if (silence) { phaseText.textContent = T("Just sit. Be the silence.", "\u09b6\u09c1\u09a7\u09c1 \u09ac\u09b8\u09c1\u09a8\u0964 \u09a8\u09c0\u09b0\u09ac\u09a4\u09be\u0987 \u09b9\u09df\u09c7 \u0989\u09a0\u09c1\u09a8\u0964"); MedVoice.speak(T("Let us simply sit. Nothing to do now. Only to be here, softly, with yourself, breathing.", "\u099a\u09b2\u09c1\u09a8 \u0986\u09ae\u09b0\u09be \u09b6\u09c1\u09a7\u09c1 \u09ac\u09b8\u09bf\u0964 \u098f\u0996\u09a8 \u0995\u09b0\u09be\u09b0 \u0995\u09bf\u099b\u09c1 \u09a8\u09c7\u0987\u0964 \u09b6\u09c1\u09a7\u09c1 \u098f\u0996\u09be\u09a8\u09c7 \u09a5\u09be\u0995\u09c1\u09a8, \u0995\u09cb\u09ae\u09b2\u09ad\u09be\u09ac\u09c7, \u09a8\u09bf\u099c\u09c7\u09b0 \u09b8\u09be\u09a5\u09c7, \u09b6\u09cd\u09ac\u09be\u09b8 \u09a8\u09bf\u09a4\u09c7 \u09a8\u09bf\u09a4\u09c7\u0964")); }
       else { idx = 0; runPhase(scalePhases(basePhases, chosen)); }
     }
 
     // ── continuous breath pacer: the guide breathes WITH you the whole time ──
     var pacerOn = false, pacerT = null, pace = [4, 1, 6, 1];   // in, hold, out, hold (seconds)
     function glow() { var c = (stages && (stages[Math.min(curIdx, stages.length - 1)] || {}).color) || "#E8009A"; return " drop-shadow(0 0 28px " + c + ")"; }
-    function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+    var amp = 0.5;   // grows 0.5 -> ~1.4 as the session deepens (slow -> strong)
+    function buzz(ms) { try { if (MedVoice.haptic() && navigator.vibrate) navigator.vibrate(Math.max(1, Math.round(ms * amp))); } catch (e) {} }
     function breathStep(phase) {
       if (!running || !pacerOn) return;
       var inS = pace[0], hold1 = pace[1], outS = pace[2], hold2 = pace[3];
       if (phase === 0) {                                        // inhale
-        breathLabel.textContent = "breathe in";
+        breathLabel.textContent = T("breathe in", "\u09b6\u09cd\u09ac\u09be\u09b8 \u09a8\u09bf\u09a8");
         orb.style.transition = "transform " + inS + "s cubic-bezier(.4,0,.2,1), filter " + inS + "s ease-in-out";
         orb.style.transform = "scale(1.2)"; orb.style.filter = "brightness(1.3)" + glow(); buzz(12);
         pacerT = setTimeout(function () { breathStep(1); }, inS * 1000);
       } else if (phase === 1) {                                 // hold (full)
-        if (hold1 > 0.4) breathLabel.textContent = "hold";
+        if (hold1 > 0.4) breathLabel.textContent = T("hold", "\u09a7\u09b0\u09c7 \u09b0\u09be\u0996\u09c1\u09a8");
         pacerT = setTimeout(function () { breathStep(2); }, hold1 * 1000);
       } else if (phase === 2) {                                 // exhale
-        breathLabel.textContent = "breathe out";
+        breathLabel.textContent = T("breathe out", "\u09b6\u09cd\u09ac\u09be\u09b8 \u099b\u09be\u09a1\u09c1\u09a8");
         orb.style.transition = "transform " + outS + "s cubic-bezier(.4,0,.2,1), filter " + outS + "s ease-in-out";
         orb.style.transform = "scale(0.84)"; orb.style.filter = "brightness(0.92)" + glow(); buzz(7);
         pacerT = setTimeout(function () { breathStep(3); }, outS * 1000);
       } else {                                                  // hold (empty)
-        if (hold2 > 0.4) breathLabel.textContent = "rest";
+        if (hold2 > 0.4) breathLabel.textContent = T("rest", "\u09ac\u09bf\u09b6\u09cd\u09b0\u09be\u09ae");
         pacerT = setTimeout(function () { breathStep(0); }, hold2 * 1000);
       }
     }
@@ -260,7 +321,8 @@
     function runPhase(phases) {
       if (!running) return;
       clearTimeout(murT);
-      if (idx >= phases.length) return;                          // timer ends the session
+      if (idx >= phases.length) return;
+      amp = 0.5 + 0.9 * (idx / Math.max(1, phases.length - 1));   // ramp the pulse as we go deeper                          // timer ends the session
       var ph = phases[idx], text = ph[0], secs = ph[1], voice = ph[2] || text, q = ph[3] || "";
       if (stages) {
         curIdx = idx; var st = stages[Math.min(idx, stages.length - 1)];

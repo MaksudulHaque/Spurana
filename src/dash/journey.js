@@ -40,6 +40,57 @@
       H.el("div", { class: "row", style: "gap:8px" }, [name, save]),
     ]));
 
+    // ── Sound, Voice & Language ──
+    (function () {
+      var MV = window.MedVoice;
+      var c = H.el("div", { class: "card stack", style: "gap:14px" });
+      c.appendChild(H.el("div", { class: "f-label" }, "Sound, Voice & Language"));
+
+      // language
+      function langRow() {
+        var row = H.el("div", { class: "row", style: "gap:8px" });
+        ["en", "bn"].forEach(function (L) {
+          var on = (window.LANG || "en") === L;
+          row.appendChild(H.el("button", { class: "btn" + (on ? " btn-primary" : " btn-ghost"), style: "flex:1",
+            onClick: function () { window.setLang(L); toast(L === "bn" ? "\u09ad\u09be\u09b7\u09be: \u09ac\u09be\u0982\u09b2\u09be \u2726" : "Language: English \u2726"); Router.go("settings"); } },
+            L === "bn" ? "\u09ac\u09be\u0982\u09b2\u09be" : "English"));
+        });
+        return row;
+      }
+      c.appendChild(H.el("div", {}, [H.el("div", { class: "zc-desc", style: "margin-bottom:6px" }, "Guidance language"), langRow()]));
+
+      if (MV) {
+        // guide voice gender
+        var grow = H.el("div", { class: "row", style: "gap:8px" });
+        [["her", "Her"], ["him", "Him"]].forEach(function (g) {
+          var on = MV.gender() === g[0];
+          grow.appendChild(H.el("button", { class: "btn" + (on ? " btn-primary" : " btn-ghost"), style: "flex:1",
+            onClick: function () { MV.setGender(g[0]); MV.speak(window.T("This is my voice.", "\u098f\u0987 \u0986\u09ae\u09be\u09b0 \u0995\u09a3\u09cd\u09a0\u09b8\u09cd\u09ac\u09b0\u0964")); Router.go("settings"); } }, g[1]));
+        });
+        c.appendChild(H.el("div", {}, [H.el("div", { class: "zc-desc", style: "margin-bottom:6px" }, "Narrator"), grow]));
+
+        // device voice picker (the most human voice your phone has)
+        try {
+          var list = MV.listVoices ? MV.listVoices() : [];
+          if (list.length) {
+            var sel = H.el("select", { class: "input" });
+            sel.appendChild(H.el("option", { value: "" }, "Auto (best available)"));
+            list.forEach(function (v) { var o = H.el("option", { value: v.uri }, v.name + " \u00b7 " + v.lang); if (v.uri === MV.currentVoiceURI()) o.setAttribute("selected", "selected"); sel.appendChild(o); });
+            sel.addEventListener("change", function () { MV.setVoice(sel.value); MV.speak(window.T("This is my voice.", "\u098f\u0987 \u0986\u09ae\u09be\u09b0 \u0995\u09a3\u09cd\u09a0\u09b8\u09cd\u09ac\u09b0\u0964")); });
+            c.appendChild(H.el("div", {}, [H.el("div", { class: "zc-desc", style: "margin-bottom:6px" }, "Voice (uses your phone's voices)"), sel]));
+            if (window.LANG === "bn" && !MV.hasBangla()) c.appendChild(H.el("div", { class: "zc-desc", style: "color:var(--gold)" }, "No Bangla voice found on this device \u2014 install a Bangla text-to-speech voice in your phone settings for spoken Bangla."));
+          }
+        } catch (e) {}
+
+        // breath vibration
+        var hOn = MV.haptic();
+        var hb = H.el("button", { class: "btn" + (hOn ? " btn-primary" : " btn-ghost"), style: "width:100%" }, hOn ? "Breath vibration: On" : "Breath vibration: Off");
+        hb.onclick = function () { MV.setHaptic(!MV.haptic()); Router.go("settings"); };
+        c.appendChild(H.el("div", {}, [H.el("div", { class: "zc-desc", style: "margin-bottom:6px" }, "Feel the breath as a pulse (Android)"), hb]));
+      }
+      body.appendChild(c);
+    })();
+
     function link(icon, title, go) {
       return H.el("button", { class: "zone-card", onClick: () => Router.go(go) }, [
         H.el("div", { class: "zc-icon" }, icon),

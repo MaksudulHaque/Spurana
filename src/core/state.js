@@ -15,6 +15,10 @@
     contacts: [],      // bonded souls
     pendingInvite: null, // invite code captured from URL before login
   };
+  // ── language: 'en' | 'bn' (Bangla). T(en, bn) returns the active-language string. ──
+  try { window.LANG = (localStorage.getItem("spurana.lang") === "bn") ? "bn" : "en"; } catch (e) { window.LANG = "en"; }
+  window.T = function (en, bn) { return (window.LANG === "bn" && bn) ? bn : en; };
+  window.setLang = function (l) { window.LANG = (l === "bn") ? "bn" : "en"; try { localStorage.setItem("spurana.lang", window.LANG); } catch (e) {} };
 
   // --- tiny DOM helpers (no frameworks, no DOM-scanning loops) ---
   const H = {

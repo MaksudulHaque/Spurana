@@ -41,9 +41,22 @@
       H.el("button", { class: "btn btn-primary", onClick: shareLink }, "Share"),
     ]);
     body.appendChild(share);
-    const stageHost = H.el("div", { class: "watch-stage" }, H.el("div", { id: "ytplayer" }));
+    function goFs() { try { var el = stageHost; var r = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen; if (r) r.call(el); else { var ifr = el.querySelector("iframe"); if (ifr && ifr.webkitEnterFullscreen) ifr.webkitEnterFullscreen(); } } catch (e) {} }
+    const fsBtn = H.el("button", { class: "watch-fs", title: "Fullscreen", onClick: goFs }, "\u26F6");
+    const stageHost = H.el("div", { class: "watch-stage" }, [H.el("div", { id: "ytplayer" }), fsBtn]);
     const hint = H.el("div", { class: "pad center faint", style: "font-family:var(--f-soul);font-style:italic" }, "Share a link to begin \u2014 play, pause and seek stay in sync for you both.");
     body.append(stageHost, hint);
+
+    // ── live chat, same page (shared with the normal conversation) ──
+    const chatList = H.el("div", { class: "watch-chat-list" });
+    const chatInput = H.el("input", { class: "input", placeholder: "Say something\u2026", style: "flex:1" });
+    const chatSend = H.el("button", { class: "btn btn-primary", onClick: fireChat }, "\u27A4");
+    body.appendChild(H.el("div", { class: "watch-chat" }, [chatList, H.el("div", { class: "row", style: "gap:8px;padding:8px" }, [chatInput, chatSend])]));
+    function addMsg(m) { if (!m || (m.conv_id && m.conv_id !== conv) || m.deleted) return; const mine = m.uid === myId; chatList.appendChild(H.el("div", { class: "wc-row " + (mine ? "me" : "them") }, H.el("div", { class: "wc-bubble" }, m.text || ""))); chatList.scrollTop = chatList.scrollHeight; }
+    async function fireChat() { const t = (chatInput.value || "").trim(); if (!t) return; chatInput.value = ""; try { await SP.chat.send(conv, { text: t }); } catch (e) {} }
+    chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fireChat(); } });
+    (async () => { try { const r = await SP.chat.history(conv, 30); if (r && r.data) r.data.forEach(addMsg); } catch (e) {} })();
+    let chatCh = null; try { chatCh = SP._sb.channel("wchat:" + conv).on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: "conv_id=eq." + conv }, (pl) => addMsg(pl.new)).subscribe(); } catch (e) {}
 
     let player = null, videoId = null, applying = false, ready = false, ch = null;
 
@@ -96,6 +109,6 @@
     (async () => { try { const r = await SP.shared.watch.get(conv); if (r && r.data && r.data.video_id) onRemote(Object.assign({}, r.data, { last_by: null })); } catch (e) {} })();
     try { ch = SP.shared.watch.subscribe(conv, onRemote); } catch (e) {}
 
-    return { teardown() { try { if (player && player.destroy) player.destroy(); } catch (e) {} try { if (ch && SP._sb) SP._sb.removeChannel(ch); } catch (e) {} } };
+    return { teardown() { try { if (player && player.destroy) player.destroy(); } catch (e) {} try { if (ch && SP._sb) SP._sb.removeChannel(ch); } catch (e) {} try { if (chatCh && SP._sb) SP._sb.removeChannel(chatCh); } catch (e) {} } };
   });
 })();

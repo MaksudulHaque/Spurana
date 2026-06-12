@@ -179,3 +179,39 @@ select.input{-webkit-appearance:none;appearance:none}
 .mem-cell.open .mem-face,.mem-cell.done .mem-face{opacity:1;transform:scale(1)}
 .mem-cell.open{border-color:var(--q);box-shadow:var(--glow-q-sm)}
 .mem-cell.done{border-color:var(--gold);background:rgba(201,169,110,.12);cursor:default}
+
+/* Watch/Listen Together — fullscreen + same-page chat */
+.watch-fs{position:absolute;right:8px;bottom:8px;z-index:3;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.32);color:#fff;border-radius:9px;padding:5px 9px;font-size:16px;line-height:1;cursor:pointer}
+.watch-chat{display:flex;flex-direction:column;border-top:1px solid var(--border);margin-top:8px}
+.watch-chat-list{max-height:34vh;min-height:110px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px;display:flex;flex-direction:column;gap:6px}
+.wc-row{display:flex}.wc-row.me{justify-content:flex-end}
+.wc-bubble{max-width:78%;padding:7px 11px;border-radius:14px;font-size:14px;line-height:1.35;background:rgba(34,22,46,.7);border:1px solid var(--border);color:var(--text);word-break:break-word}
+.wc-row.me .wc-bubble{background:linear-gradient(135deg,var(--q),var(--q-bright));color:#fff;border:none}
+
+/* ════════ Awareness Wall ════════ */
+.wall-wrap{padding:0 0 46px}
+.f-soul{font-family:var(--f-soul);font-style:italic}.f-sacred{font-family:var(--f-sacred)}
+.wall-head{padding:26px var(--gutter) 8px;text-align:center}
+.wall-title{font-size:26px;background:linear-gradient(120deg,var(--gold),var(--gold-bright) 45%,var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.wall-sub{font-family:var(--f-ui);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--text-dim);margin-top:4px}
+.wall-music{margin:16px auto 4px;display:inline-flex;align-items:center;gap:9px;padding:10px 20px;border-radius:30px;border:1px solid var(--border);background:linear-gradient(160deg,rgba(34,22,46,.6),rgba(13,9,21,.7));color:var(--gold);font-family:var(--f-ui);font-size:13px;letter-spacing:.06em;cursor:pointer;transition:var(--t)}
+.wall-music.on{border-color:var(--q);box-shadow:var(--glow-q-sm);color:var(--gold-bright)}
+.wall-music-ico{font-size:11px}
+.wall-links{display:flex;gap:10px;justify-content:center;padding:6px var(--gutter) 8px}
+.wall-link{flex:1;max-width:170px;padding:11px;border-radius:13px;border:1px solid var(--border);background:rgba(34,22,46,.45);color:var(--gold);font-family:var(--f-ui);font-size:12px;letter-spacing:.12em;cursor:pointer}
+.wall-feed{display:flex;flex-direction:column;gap:13px;padding:10px var(--gutter) 0}
+.wall-card{border-radius:18px;padding:18px;border:1px solid var(--border);background:linear-gradient(160deg,rgba(34,22,46,.55),rgba(13,9,21,.72));backdrop-filter:blur(6px);transition:var(--t)}
+.wall-card.wall-glow{border-color:var(--q);box-shadow:var(--glow-q-sm)}
+.wall-tag{font-family:var(--f-ui);font-size:9px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);opacity:.8;margin-bottom:10px}
+.wall-body{font-size:17px;line-height:1.5;color:var(--text)}
+.wall-affirm{font-size:22px;text-align:center;line-height:1.35;color:transparent;background:linear-gradient(120deg,var(--gold-bright),var(--q-bright));-webkit-background-clip:text;background-clip:text;padding:6px 0}
+.wall-do{margin-top:13px;padding:9px 16px;border-radius:11px;border:1px solid var(--border);background:rgba(232,0,154,.12);color:var(--gold-bright);font-family:var(--f-ui);font-size:12px;letter-spacing:.1em;cursor:pointer}
+.wall-do:disabled{opacity:.7;color:var(--gold)}
+.wall-orb{width:92px;height:92px;border-radius:50%;margin:14px auto 8px;background:radial-gradient(circle at 42% 34%,rgba(255,106,208,.55),rgba(232,0,154,.18) 55%,transparent 72%);border:1px solid rgba(201,169,110,.3);transition:transform 4s cubic-bezier(.4,0,.2,1);cursor:pointer}
+.wall-orb.live{box-shadow:0 0 36px rgba(232,0,154,.4)}
+.wall-breath-label{text-align:center;font-family:var(--f-ui);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim)}
+.wall-count{font-family:var(--f-sacred);font-size:40px;text-align:center;color:var(--gold-bright);margin:8px 0 4px}
+.wall-emo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:6px}
+.wall-emo{padding:10px 4px;border-radius:11px;border:1px solid var(--border);background:rgba(34,22,46,.5);color:var(--text);font-family:var(--f-ui);font-size:12px;cursor:pointer;transition:var(--t)}
+.wall-emo.sel{border-color:var(--q);background:rgba(232,0,154,.18);color:var(--gold-bright)}
+.wall-emo-reply{margin-top:11px;font-family:var(--f-soul);font-style:italic;font-size:14px;color:var(--gold);min-height:20px;text-align:center}

@@ -64,6 +64,7 @@ const JS = [
   "oracle/oracle.js",
   "divine/divine.js",
   "dash/self.js",
+  "wall/wall.js",
   "core/boot.js",       // entry point — last
 ];
 

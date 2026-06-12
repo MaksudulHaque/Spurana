@@ -11,7 +11,7 @@
   "use strict";
   window.Signaling = {
     me() { return APP.me && APP.me.id; },
-    iceConfig() { const ice = (CFG.ICE || []).slice(); if (CFG.TURN) ice.push(CFG.TURN); return { iceServers: ice }; },
+    iceConfig() { const ice = (CFG.ICE || []).slice(); if (CFG.TURN) { if (Array.isArray(CFG.TURN)) ice.push.apply(ice, CFG.TURN); else ice.push(CFG.TURN); } return { iceServers: ice }; },
     async send(conv, type, extra) {
       try {
         const r = await SP.calls.sendSignal(conv, Object.assign({ type: type }, extra || {}));

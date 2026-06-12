@@ -20,7 +20,13 @@
     // WebRTC: public STUN works on same/simple networks; add a TURN server
     // (url/username/credential) for reliable connff across mobile NATs.
     ICE: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
-    TURN: null,
+    TURN: [
+      { urls: "stun:stun.relay.metered.ca:80" },
+      { urls: "turn:global.relay.metered.ca:80", username: "f76d5e2224b74e8ca8941a71", credential: "RMjAdrh0zm1Pnilz" },
+      { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "f76d5e2224b74e8ca8941a71", credential: "RMjAdrh0zm1Pnilz" },
+      { urls: "turn:global.relay.metered.ca:443", username: "f76d5e2224b74e8ca8941a71", credential: "RMjAdrh0zm1Pnilz" },
+      { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "f76d5e2224b74e8ca8941a71", credential: "RMjAdrh0zm1Pnilz" },
+    ],
     CONSENT_AGREE: "I have read and agree to the Privacy & Consent Notice.",
   };
 })();

@@ -26,7 +26,7 @@
       if (r.ok) { toast("Bonded with " + r.partner.name + " ✦"); Router.go("thread", { c: r.conv }); return; }
       toast(r.msg, true);
     }
-    Router.go("self");
+    Router.go("wall");
   };
 
   (async function boot() {

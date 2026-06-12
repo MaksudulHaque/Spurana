@@ -19,6 +19,15 @@
     const audio = H.el("audio", { controls: "true", style: "width:100%;margin-top:8px" });
     body.appendChild(audio);
     body.appendChild(H.el("p", { class: "center faint", style: "font-family:var(--f-soul);font-style:italic" }, "One song, two hearts in rhythm. Share a link to begin."));
+    // ── live chat, same page (shared with the conversation) ──
+    const chatList = H.el("div", { class: "watch-chat-list" });
+    const chatInput = H.el("input", { class: "input", placeholder: "Say something\u2026", style: "flex:1" });
+    body.appendChild(H.el("div", { class: "watch-chat" }, [chatList, H.el("div", { class: "row", style: "gap:8px;padding:8px" }, [chatInput, H.el("button", { class: "btn btn-primary", onClick: fireChat }, "\u27A4")])]));
+    function addMsg(m) { if (!m || (m.conv_id && m.conv_id !== conv) || m.deleted) return; const mine = m.uid === myId; chatList.appendChild(H.el("div", { class: "wc-row " + (mine ? "me" : "them") }, H.el("div", { class: "wc-bubble" }, m.text || ""))); chatList.scrollTop = chatList.scrollHeight; }
+    async function fireChat() { const t = (chatInput.value || "").trim(); if (!t) return; chatInput.value = ""; try { await SP.chat.send(conv, { text: t }); } catch (e) {} }
+    chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fireChat(); } });
+    (async () => { try { const r = await SP.chat.history(conv, 30); if (r && r.data) r.data.forEach(addMsg); } catch (e) {} })();
+    let chatCh = null; try { chatCh = SP._sb.channel("lchat:" + conv).on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: "conv_id=eq." + conv }, (pl) => addMsg(pl.new)).subscribe(); } catch (e) {}
 
     let applying = false, url = null, ch = null;
     function safeSet(f) { try { const r = SP.shared.listen.set(conv, f); if (r && r.then) r.then(function () {}, function () {}); } catch (e) {} }
@@ -44,6 +53,6 @@
     ["play", "pause", "seeked"].forEach((ev) => audio.addEventListener(ev, send));
     (async () => { try { const r = await SP.shared.listen.get(conv); if (r && r.data && r.data.url) onRemote(Object.assign({}, r.data, { last_by: null })); } catch (e) {} })();
     try { ch = SP.shared.listen.subscribe(conv, onRemote); } catch (e) {}
-    return { teardown() { try { audio.pause(); } catch (e) {} try { if (ch && SP._sb) SP._sb.removeChannel(ch); } catch (e) {} } };
+    return { teardown() { try { audio.pause(); } catch (e) {} try { if (ch && SP._sb) SP._sb.removeChannel(ch); } catch (e) {} try { if (chatCh && SP._sb) SP._sb.removeChannel(chatCh); } catch (e) {} } };
   });
 })();

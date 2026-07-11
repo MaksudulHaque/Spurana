@@ -107,7 +107,7 @@
       setOn: function (b) { st.on = b; save(); if (!b) cancel(); },
       setGender: function (g) { st.gender = g; st.voiceURI = ""; save(); },
       haptic: function () { return st.haptic; },
-      setHaptic: function (b) { st.haptic = !!b; save(); },
+      setHaptic: function (b) { st.haptic = !!b; save(); if (b) { try { if (window.Native && Native.pattern) Native.pattern([60, 90, 60, 90, 130]); else if (navigator.vibrate) navigator.vibrate([60, 90, 60, 90, 130]); } catch (e) {} } },
       listVoices: function () { refresh(); return voices.filter(function (v) { return v.lang && (/^en/i.test(v.lang) || /^bn/i.test(v.lang)); }).map(function (v) { return { name: v.name, uri: v.voiceURI, lang: v.lang }; }); },
       currentVoiceURI: function () { return st.voiceURI; },
       setVoice: function (uri) { st.voiceURI = uri || ""; save(); },
@@ -277,7 +277,7 @@
     function startSession() {
       picker.classList.add("hidden"); session.classList.remove("hidden");
       try { if (window.Ambient) { Ambient.setPreset(sound); Ambient.enable(true); } } catch (e) {}
-      bell(); startFx();
+      bell(); startFx(); sig("wake");
       running = true; started = Date.now(); total = chosen * 60; remain = total;
       tickT = setInterval(function () {
         remain--; clock.textContent = fmt(Math.max(0, remain));
@@ -294,18 +294,19 @@
     var pacerOn = false, pacerT = null, pace = [4, 1, 6, 1];   // in, hold, out, hold (seconds)
     function glow() { var c = (stages && (stages[Math.min(curIdx, stages.length - 1)] || {}).color) || "#E8009A"; return " drop-shadow(0 0 28px " + c + ")"; }
     var amp = 0.5;   // grows 0.5 -> ~1.4 as the session deepens (slow -> strong)
-    function buzz(ms) {
-      try {
-        if (!MedVoice.haptic()) return;
-        var eff = Math.max(1, Math.round(ms * amp));
-        var Cap = window.Capacitor, Hp = Cap && Cap.Plugins && Cap.Plugins.Haptics;
-        if (Hp) { // native motor (Capacitor app) — amp ramp maps slow→strong
-          if (eff >= 40) Hp.vibrate({ duration: eff });
-          else Hp.impact({ style: amp > 1.1 ? "HEAVY" : amp > 0.75 ? "MEDIUM" : "LIGHT" });
-          return;
-        }
-        if (navigator.vibrate) navigator.vibrate(eff); // web fallback
-      } catch (e) {}
+    function mm(x) { return Math.max(18, Math.min(450, Math.round(x * amp))); }
+    function motorGo(ms) { try { if (window.Native && Native.buzz) Native.buzz(ms); else if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+    function patGo(seq) { try { if (window.Native && Native.pattern) Native.pattern(seq); else if (navigator.vibrate) navigator.vibrate(seq); } catch (e) {} }
+    function buzz(ms) { if (MedVoice.haptic()) motorGo(mm(ms * 3)); }
+    // breath signatures — distinct, felt, ramping deeper with amp
+    function sig(kind) {
+      if (!MedVoice.haptic()) return;
+      if (kind === "in") patGo([mm(45), 90, mm(85)]);                       // rising double — air coming in
+      else if (kind === "hold") motorGo(mm(28));                            // a still point
+      else if (kind === "out") motorGo(mm(140));                            // one long soft release
+      else if (kind === "rest") motorGo(mm(20));
+      else if (kind === "heart") patGo([mm(70), 110, mm(130), 620, mm(80), 110, mm(150)]); // lub-dub ×2
+      else if (kind === "wake") patGo([mm(40), 80, mm(40), 80, mm(90)]);    // session opens
     }
     function breathStep(phase) {
       if (!running || !pacerOn) return;
@@ -313,18 +314,18 @@
       if (phase === 0) {                                        // inhale
         breathLabel.textContent = T("breathe in", "\u09b6\u09cd\u09ac\u09be\u09b8 \u09a8\u09bf\u09a8");
         orb.style.transition = "transform " + inS + "s cubic-bezier(.4,0,.2,1), filter " + inS + "s ease-in-out";
-        orb.style.transform = "scale(1.2)"; orb.style.filter = "brightness(1.3)" + glow(); buzz(12);
+        orb.style.transform = "scale(1.2)"; orb.style.filter = "brightness(1.3)" + glow(); sig("in");
         pacerT = setTimeout(function () { breathStep(1); }, inS * 1000);
       } else if (phase === 1) {                                 // hold (full)
-        if (hold1 > 0.4) breathLabel.textContent = T("hold", "\u09a7\u09b0\u09c7 \u09b0\u09be\u0996\u09c1\u09a8");
+        if (hold1 > 0.4) { breathLabel.textContent = T("hold", "\u09a7\u09b0\u09c7 \u09b0\u09be\u0996\u09c1\u09a8"); sig("hold"); }
         pacerT = setTimeout(function () { breathStep(2); }, hold1 * 1000);
       } else if (phase === 2) {                                 // exhale
         breathLabel.textContent = T("breathe out", "\u09b6\u09cd\u09ac\u09be\u09b8 \u099b\u09be\u09a1\u09c1\u09a8");
         orb.style.transition = "transform " + outS + "s cubic-bezier(.4,0,.2,1), filter " + outS + "s ease-in-out";
-        orb.style.transform = "scale(0.84)"; orb.style.filter = "brightness(0.92)" + glow(); buzz(7);
+        orb.style.transform = "scale(0.84)"; orb.style.filter = "brightness(0.92)" + glow(); sig("out");
         pacerT = setTimeout(function () { breathStep(3); }, outS * 1000);
       } else {                                                  // hold (empty)
-        if (hold2 > 0.4) breathLabel.textContent = T("rest", "\u09ac\u09bf\u09b6\u09cd\u09b0\u09be\u09ae");
+        if (hold2 > 0.4) { breathLabel.textContent = T("rest", "\u09ac\u09bf\u09b6\u09cd\u09b0\u09be\u09ae"); sig("rest"); }
         pacerT = setTimeout(function () { breathStep(0); }, hold2 * 1000);
       }
     }
@@ -372,7 +373,7 @@
       clearTimeout(stepT); clearInterval(tickT); clearTimeout(murT); stopPacer();
       if (fxRaf && window.cancelAnimationFrame) cancelAnimationFrame(fxRaf);
       MedVoice.cancel();
-      if (done) { bell(); setTimeout(bell, 900); }
+      if (done) { sig("heart"); bell(); setTimeout(bell, 900); }
       orb.style.transform = "scale(0.8)";
       phaseText.textContent = done ? "Complete \u2726" : "Until next time \u2726";
       qText.textContent = "";

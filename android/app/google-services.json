@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "163924491878",
+    "firebase_url": "https://spurana-abe15-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "spurana-abe15",
+    "storage_bucket": "spurana-abe15.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:163924491878:android:f07d9c5b73778b775977a7",
+        "android_client_info": {
+          "package_name": "app.spurana.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "163924491878-49438o8g2bl8ugf9hojma1402s4h94n9.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYdhb_MkVQJRQcjo-4anftWWZysX4Tq7g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "163924491878-49438o8g2bl8ugf9hojma1402s4h94n9.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

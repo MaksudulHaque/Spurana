@@ -87,6 +87,22 @@
         var hb = H.el("button", { class: "btn" + (hOn ? " btn-primary" : " btn-ghost"), style: "width:100%" }, hOn ? "Breath vibration: On" : "Breath vibration: Off");
         hb.onclick = function () { MV.setHaptic(!MV.haptic()); Router.go("settings"); };
         c.appendChild(H.el("div", {}, [H.el("div", { class: "zc-desc", style: "margin-bottom:6px" }, "Feel the breath as a pulse (Android)"), hb]));
+        // vibration test + truth: shows exactly which motor path this phone has
+        var tb = H.el("button", { class: "btn btn-ghost", style: "width:100%;margin-top:8px" }, "Test the pulse \u26A1");
+        tb.onclick = function () {
+          var Cap = window.Capacitor;
+          var hp = !!(Cap && Cap.Plugins && Cap.Plugins.Haptics);
+          var nv = !!navigator.vibrate;
+          var isN = !!(Cap && Cap.isNativePlatform && Cap.isNativePlatform());
+          var msg = (isN ? "native app" : "browser") + " \u00b7 haptics plugin: " + (hp ? "yes" : "NO") + " \u00b7 web vibrate: " + (nv ? "yes" : "NO");
+          try {
+            if (hp) { Cap.Plugins.Haptics.vibrate({ duration: 400 }); msg = "FIRED native motor 400ms \u00b7 " + msg; }
+            else if (nv) { navigator.vibrate([300, 120, 300]); msg = "FIRED web vibrate \u00b7 " + msg; }
+            else msg = "NO vibration path exists \u00b7 " + msg;
+          } catch (e) { msg = "threw: " + (e && e.message) + " \u00b7 " + msg; }
+          if (window.toast) toast(msg);
+        };
+        c.appendChild(tb);
       }
       body.appendChild(c);
     })();

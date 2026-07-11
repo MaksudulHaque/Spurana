@@ -148,7 +148,7 @@
         update();
         chDb = SP._sb.channel("locdb:" + puid)
           .on("postgres_changes", { event: "*", schema: "public", table: "locations", filter: "uid=eq." + puid },
-            (pl) => { const n = pl && pl.new; if (n) { theirs = { lat: n.lat, lng: n.lng }; theirTs = new Date(n.updated_at).getTime(); update(); } })
+            (pl) => { const n = pl && pl.new; if (n) { theirs = { lat: n.lat, lng: n.lng }; theirTs = new Date(n.updated_at).getTime(); update(); try { if (window.SoulLoc && SoulLoc.on() && Date.now() - (window.__slPulse || 0) > 30000) { window.__slPulse = Date.now(); if (window.Native && Native.pattern) Native.pattern([45, 80, 45]); } } catch (e) {} } })
           .subscribe();
       } catch (e) {}
     })();

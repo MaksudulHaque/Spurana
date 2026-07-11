@@ -69,7 +69,33 @@
     return h;
   }
 
-  window.Native = { isNative: isNative, keepAwake: keepAwake, geoCurrent: geoCurrent, geoWatch: geoWatch };
+
+  // ── vibration engine: drives the RAW motor. (impact() haptics are
+  //    system-tick feedback — suppressed/weak on many phones; this isn't.) ──
+  var patTimers = [];
+  function motor(ms) {
+    ms = Math.max(15, Math.round(ms));
+    try {
+      if (isNative && P.Haptics && P.Haptics.vibrate) { P.Haptics.vibrate({ duration: ms }); return true; }
+      if (navigator.vibrate) { navigator.vibrate(ms); return true; }
+    } catch (e) {}
+    return false;
+  }
+  function stopPattern() {
+    patTimers.forEach(function (t) { try { clearTimeout(t); } catch (e) {} }); patTimers = [];
+    try { if (!isNative && navigator.vibrate) navigator.vibrate(0); } catch (e) {}
+  }
+  function pattern(seq) { // [on,off,on,off,...] in ms
+    stopPattern();
+    if (!isNative && navigator.vibrate) { try { navigator.vibrate(seq); return; } catch (e) {} }
+    var t = 0;
+    for (var i = 0; i < seq.length; i += 2) {
+      (function (on, at) { patTimers.push(setTimeout(function () { motor(on); }, at)); })(seq[i], t);
+      t += seq[i] + (seq[i + 1] || 0);
+    }
+  }
+
+  window.Native = { isNative: isNative, keepAwake: keepAwake, geoCurrent: geoCurrent, geoWatch: geoWatch, buzz: motor, pattern: pattern, stopPattern: stopPattern };
 
   if (!isNative) return; // browser: nothing else to do
 

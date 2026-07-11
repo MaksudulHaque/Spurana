@@ -67,6 +67,7 @@ const JS = [
   "dash/self.js",
   "wall/wall.js",
   "core/native.js",
+  "core/push.js",
   "core/boot.js",       // entry point — last
 ];
 

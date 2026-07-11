@@ -46,7 +46,7 @@
       const convIds = rows.map((r) => r.conv);
       const puids = rows.map((r) => r.puid);
       const [profs, convs] = await Promise.all([
-        SP._sb.from("profiles").select("id,name,avatar").in("id", puids),
+        SP._sb.from("profiles").select("id,name,avatar_url").in("id", puids),
         SP._sb.from("conversations").select("conv_id,last_msg_preview,last_msg_ts").in("conv_id", convIds),
       ]);
       const nameById = {}; (profs.data || []).forEach((p) => { nameById[p.id] = p.name; });

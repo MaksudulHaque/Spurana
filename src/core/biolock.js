@@ -10,7 +10,7 @@
   "use strict";
 
   var KEY = "spurana.biolock";
-  var availCache = null, veil = null, prompting = false, unlockedOnce = false;
+  var availCache = null, veil = null, prompting = false, expectResume = false, lastUnlock = 0;
 
   function BIO() {
     var C = window.Capacitor;
@@ -31,6 +31,8 @@
   function prompt(reason) {
     var b = BIO();
     if (!b) return Promise.reject(new Error("no biometry"));
+    expectResume = true; // the biometric sheet pauses/resumes US — don't re-lock for it
+    setTimeout(function () { expectResume = false; }, 6000);
     return b.internalAuthenticate({
       reason: reason || "Unlock Spurana",
       androidTitle: "The Sanctum Seal",
@@ -68,7 +70,7 @@
     if (prompting) return;
     prompting = true;
     prompt("Unlock Spurana").then(function () {
-      prompting = false; unlockedOnce = true;
+      prompting = false; lastUnlock = Date.now();
       vibe([30, 45, 70]);
       hide();
     }).catch(function () {
@@ -93,6 +95,7 @@
       if (!(await available())) { if (window.toast) toast("Biometrics aren't available on this device.", true); return false; }
       try {
         await prompt(v ? "Confirm to seal the sanctum" : "Confirm to remove the seal");
+        lastUnlock = Date.now();
         try { localStorage.setItem(KEY, v ? "1" : "0"); } catch (e) {}
         vibe([40, 60, 90]);
         if (window.toast) toast(v ? "The Sanctum Seal is set \u2726" : "The seal is lifted.");
@@ -115,7 +118,12 @@
       }, 1200);
       var C = window.Capacitor;
       if (C && C.Plugins && C.Plugins.App && C.Plugins.App.addListener) {
-        C.Plugins.App.addListener("resume", function () { if (unlockedOnce || enabled()) lock(); });
+        C.Plugins.App.addListener("resume", function () {
+          if (prompting) return;
+          if (expectResume) { expectResume = false; return; } // our own fingerprint sheet closing
+          if (Date.now() - lastUnlock < 2500) return;          // just unlocked — grace
+          if (enabled()) lock();
+        });
       }
     }
   } catch (e) {}

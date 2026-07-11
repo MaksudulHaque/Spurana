@@ -88,36 +88,73 @@
     return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
   }
   Router.register("track", function (root) {
-    const conv = needConv(); if (!conv) return {};
     root.appendChild(topBar({ title: "Track Souls", back: true }));
-    const body = H.el("div", { class: "pad scroll grow reveal", style: "display:flex;flex-direction:column;align-items:center;gap:18px;justify-content:center;min-height:55vh" });
+    const body = H.el("div", { class: "pad scroll grow reveal", style: "display:flex;flex-direction:column;align-items:center;gap:16px;justify-content:center;min-height:58vh" });
     root.appendChild(body);
-    const dot = H.el("div", { class: "track-orb" });
-    const distEl = H.el("div", { class: "track-dist" }, "\u2014");
-    const note = H.el("p", { class: "center muted", style: "font-family:var(--f-soul);font-style:italic;max-width:300px" }, "Share your location to feel how far apart you are. Opt-in, never stored.");
-    const btn = H.el("button", { class: "sacred-btn", onClick: toggle }, "Share my location");
-    body.append(dot, distEl, note, btn);
 
-    let ch = null, watchId = null, mine = null, theirs = null, sharing = false;
+    const dot = H.el("div", { class: "track-orb" });
+    const arrow = H.el("div", { style: "font-size:30px;transition:transform .8s ease;line-height:1" }, "\u2191");
+    const distEl = H.el("div", { class: "track-dist" }, "\u2014");
+    const dirEl = H.el("div", { class: "muted", style: "font-family:var(--f-ui);font-size:12px;letter-spacing:.18em;text-transform:uppercase" }, "");
+    const fresh = H.el("div", { class: "muted", style: "font-size:12px" }, "");
+    const note = H.el("p", { class: "center muted", style: "font-family:var(--f-soul);font-style:italic;max-width:300px" }, "Share your location while the app is open. Only your bonded soul can see it. Opt-in, always.");
+    const btn = H.el("button", { class: "sacred-btn", onClick: toggle }, "\u2026");
+    body.append(dot, arrow, distEl, dirEl, fresh, note, btn);
+
+    let mine = window.SoulLoc ? SoulLoc.mine() : null, theirs = null, theirTs = 0, pname = "them";
+    let chDb = null, chLive = null, tick = null;
+
+    function bearing(a, b) {
+      const f1 = a.lat * Math.PI / 180, f2 = b.lat * Math.PI / 180, dl = (b.lng - a.lng) * Math.PI / 180;
+      const y = Math.sin(dl) * Math.cos(f2), x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+    function cardinal(d) { return ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"][Math.round(d / 45) % 8]; }
+    function ago(ts) { const s = Math.max(0, (Date.now() - ts) / 1000 | 0); return s < 8 ? "just now" : s < 60 ? s + "s ago" : s < 3600 ? (s / 60 | 0) + "m ago" : (s / 3600 | 0) + "h ago"; }
+
     function update() {
-      if (mine && theirs) { const d = dist(mine, theirs); distEl.textContent = d < 0.05 ? "Together \u2726" : d < 1 ? Math.round(d * 1000) + " m apart" : d.toFixed(d < 10 ? 1 : 0) + " km apart"; note.textContent = "The distance between two souls, in this moment."; }
-      else if (sharing) distEl.textContent = "waiting for them\u2026";
+      const sharing = window.SoulLoc && SoulLoc.on();
+      btn.textContent = sharing ? "Stop sharing" : "Share my location";
+      dot.classList.toggle("live", !!(sharing && SoulLoc.active()));
+      if (mine && theirs) {
+        const d = dist(mine, theirs), b = bearing(mine, theirs);
+        distEl.textContent = d < 0.05 ? "Together \u2726" : d < 1 ? Math.round(d * 1000) + " m apart" : d.toFixed(d < 10 ? 1 : 0) + " km apart";
+        dirEl.textContent = pname + " is to the " + cardinal(b);
+        arrow.style.transform = "rotate(" + b.toFixed(0) + "deg)";
+        fresh.textContent = theirTs ? "their light: " + ago(theirTs) : "";
+        note.textContent = "The distance between two souls, in this moment.";
+      } else if (theirs) {
+        dirEl.textContent = "";
+        distEl.textContent = "they are sharing \u2726";
+        fresh.textContent = theirTs ? "their light: " + ago(theirTs) : "";
+        note.textContent = sharing ? "Waiting for your first fix\u2026" : "Share yours to feel the distance.";
+      } else {
+        distEl.textContent = sharing ? "waiting for them\u2026" : "\u2014";
+        dirEl.textContent = ""; fresh.textContent = "";
+      }
     }
-    try {
-      ch = SP._sb.channel("loc:" + conv, { config: { broadcast: { self: false } } })
-        .on("broadcast", { event: "loc" }, (p) => { if (p && p.payload && p.payload.uid !== me()) { theirs = p.payload; update(); } })
-        .subscribe();
-    } catch (e) {}
-    function toggle() {
-      if (sharing) { stop(); return; }
-      if (!navigator.geolocation) { toast("Location isn't available on this device.", true); return; }
-      sharing = true; btn.textContent = "Stop sharing"; dot.classList.add("live"); update();
-      watchId = navigator.geolocation.watchPosition((pos) => {
-        mine = { lat: pos.coords.latitude, lng: pos.coords.longitude, uid: me() }; update();
-        try { ch && ch.send({ type: "broadcast", event: "loc", payload: mine }); } catch (e) {}
-      }, () => { toast("Location permission needed.", true); stop(); }, { enableHighAccuracy: false, maximumAge: 30000, timeout: 12000 });
-    }
-    function stop() { sharing = false; btn.textContent = "Share my location"; dot.classList.remove("live"); if (watchId != null && navigator.geolocation) navigator.geolocation.clearWatch(watchId); watchId = null; }
-    return { teardown() { stop(); try { if (ch && SP._sb) SP._sb.removeChannel(ch); } catch (e) {} } };
+    function toggle() { if (!window.SoulLoc) return; SoulLoc.set(!SoulLoc.on()); update(); }
+
+    if (window.SoulLoc) SoulLoc.onChange(function (m) { mine = m || mine; update(); });
+
+    (async () => {
+      try {
+        const { data } = await SP.contacts.list();
+        const c = (data || [])[0]; if (!c) { toast("Bond with a soul first \u2726"); return; }
+        const puid = c.contact_uid;
+        pname = c.contact_name || c.name || "them";
+        const r = await SP._sb.from("locations").select("*").eq("uid", puid).maybeSingle();
+        if (r && r.data) { theirs = { lat: r.data.lat, lng: r.data.lng }; theirTs = new Date(r.data.updated_at).getTime(); }
+        update();
+        chDb = SP._sb.channel("locdb:" + puid)
+          .on("postgres_changes", { event: "*", schema: "public", table: "locations", filter: "uid=eq." + puid },
+            (pl) => { const n = pl && pl.new; if (n) { theirs = { lat: n.lat, lng: n.lng }; theirTs = new Date(n.updated_at).getTime(); update(); } })
+          .subscribe();
+      } catch (e) {}
+    })();
+
+    tick = setInterval(update, 5000);
+    update();
+    return { teardown() { clearInterval(tick); try { if (chDb && SP._sb) SP._sb.removeChannel(chDb); } catch (e) {} try { if (chLive && SP._sb) SP._sb.removeChannel(chLive); } catch (e) {} } };
   });
 })();

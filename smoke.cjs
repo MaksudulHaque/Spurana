@@ -78,7 +78,7 @@ Object.assign(win, {
   localStorage: (function () { const m = {}; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, removeItem: (k) => { delete m[k]; } }; })(),
   crypto: { randomUUID: () => "00000000-0000-4000-8000-000000000000" },
   CSS: { escape: (s) => s }, console,
-  setTimeout, clearTimeout, URLSearchParams,
+  setTimeout, clearTimeout, setInterval, clearInterval, URLSearchParams,
   AudioContext: function () { return { state: "running", resume() {}, currentTime: 0,
     createOscillator: () => ({ frequency: {}, connect() {}, start() {}, stop() {} }),
     createGain: () => ({ gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }),

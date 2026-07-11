@@ -190,6 +190,7 @@
    * Returns { teardown }.
    * ============================================================ */
   function mount(root, opts) {
+    try { if (window.Native) Native.keepAwake(true); } catch (e) {}
     opts = opts || {};
     var minutes = opts.minutes || [3, 5, 10, 15, 20, 30];
     var chosen = opts.defaultMin || 5;
@@ -293,7 +294,19 @@
     var pacerOn = false, pacerT = null, pace = [4, 1, 6, 1];   // in, hold, out, hold (seconds)
     function glow() { var c = (stages && (stages[Math.min(curIdx, stages.length - 1)] || {}).color) || "#E8009A"; return " drop-shadow(0 0 28px " + c + ")"; }
     var amp = 0.5;   // grows 0.5 -> ~1.4 as the session deepens (slow -> strong)
-    function buzz(ms) { try { if (MedVoice.haptic() && navigator.vibrate) navigator.vibrate(Math.max(1, Math.round(ms * amp))); } catch (e) {} }
+    function buzz(ms) {
+      try {
+        if (!MedVoice.haptic()) return;
+        var eff = Math.max(1, Math.round(ms * amp));
+        var Cap = window.Capacitor, Hp = Cap && Cap.Plugins && Cap.Plugins.Haptics;
+        if (Hp) { // native motor (Capacitor app) — amp ramp maps slow→strong
+          if (eff >= 40) Hp.vibrate({ duration: eff });
+          else Hp.impact({ style: amp > 1.1 ? "HEAVY" : amp > 0.75 ? "MEDIUM" : "LIGHT" });
+          return;
+        }
+        if (navigator.vibrate) navigator.vibrate(eff); // web fallback
+      } catch (e) {}
+    }
     function breathStep(phase) {
       if (!running || !pacerOn) return;
       var inS = pace[0], hold1 = pace[1], outS = pace[2], hold2 = pace[3];
@@ -378,7 +391,7 @@
     // expose question setter for journeys
     mount._setQuestion = function (q) { qText.textContent = q || ""; };
 
-    return { teardown: function () { running = false; clearTimeout(stepT); clearInterval(tickT); clearTimeout(murT); stopPacer(); if (fxRaf && window.cancelAnimationFrame) cancelAnimationFrame(fxRaf); MedVoice.cancel(); } };
+    return { teardown: function () { running = false; try { if (window.Native) Native.keepAwake(false); } catch (e) {} clearTimeout(stepT); clearInterval(tickT); clearTimeout(murT); stopPacer(); if (fxRaf && window.cancelAnimationFrame) cancelAnimationFrame(fxRaf); MedVoice.cancel(); } };
   }
 
   window.Guide = { mount: mount, voice: MedVoice, figureSVG: figureSVG, mandalaSVG: mandalaSVG, bell: bell };

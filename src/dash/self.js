@@ -66,10 +66,11 @@
   }
   function getWeather() {
     return new Promise(function (res) {
-      if (!navigator.geolocation) return res(null);
+      var GP = (window.Native && Native.geoCurrent) ? Native.geoCurrent : (navigator.geolocation ? function (ok, er) { navigator.geolocation.getCurrentPosition(ok, er, { timeout: 6000, maximumAge: 1800000 }); } : null);
+      if (!GP) return res(null);
       var done = false;
       var t = setTimeout(function () { if (!done) { done = true; res(null); } }, 6000);
-      navigator.geolocation.getCurrentPosition(function (pos) {
+      GP(function (pos) {
         if (done) return; done = true; clearTimeout(t);
         var la = pos.coords.latitude.toFixed(2), lo = pos.coords.longitude.toFixed(2);
         fetch("https://api.open-meteo.com/v1/forecast?latitude=" + la + "&longitude=" + lo + "&current=temperature_2m,weather_code")
@@ -79,7 +80,7 @@
             var w = wmo(c.weather_code);
             res({ temp: Math.round(c.temperature_2m), glyph: w.g, label: w.l });
           }).catch(function () { res(null); });
-      }, function () { if (!done) { done = true; clearTimeout(t); res(null); } }, { timeout: 6000, maximumAge: 1800000 });
+      }, function () { if (!done) { done = true; clearTimeout(t); res(null); } });
     });
   }
 

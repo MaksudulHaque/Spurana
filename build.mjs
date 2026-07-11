@@ -60,11 +60,13 @@ const JS = [
   "reflect/weather.js",
   "reflect/reminders.js",
   "practice/library.js",
+  "connect/soulloc.js",
   "connect/extras.js",
   "oracle/oracle.js",
   "divine/divine.js",
   "dash/self.js",
   "wall/wall.js",
+  "core/native.js",
   "core/boot.js",       // entry point — last
 ];
 

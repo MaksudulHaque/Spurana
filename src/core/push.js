@@ -27,6 +27,10 @@
         id: "messages", name: "Messages", description: "Words from your soul",
         importance: 5, visibility: 1, vibration: true, lights: true, sound: "default",
       });
+      if (pn.createChannel) pn.createChannel({
+        id: "ptt", name: "Push-to-Talk", description: "Your soul is speaking",
+        importance: 5, visibility: 1, vibration: true, lights: true, sound: "default",
+      });
     } catch (e) {}
 
     try {

@@ -30,7 +30,7 @@
       img.addEventListener("click", () => { if (img.src) lightbox(img.src); });
       return img;
     }
-    if (m.type === "voice") {
+    if ((m.type === "voice" || m.type === "ptt")) {
       const audio = H.el("audio", { preload: "none" });
       const dur = Number(m.text) || 0;
       const play = H.el("button", { class: "play", title: "Play" }, "\u25B6");

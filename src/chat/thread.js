@@ -74,7 +74,7 @@
       const grp = (m.uid === lastUid) && (m.ts - lastTs < 5 * 60000);
       const row = H.el("div", { class: "row " + (mine ? "me" : "them") + " " + (grp ? "grp" : "fresh"), "data-id": m.id });
       let bubble;
-      const mediaNode = (!m.deleted && window.Media && (m.type === "image" || m.type === "voice")) ? Media.bubbleContent(m) : null;
+      const mediaNode = (!m.deleted && window.Media && (m.type === "image" || m.type === "voice" || m.type === "ptt")) ? Media.bubbleContent(m) : null;
       if (mediaNode) { bubble = H.el("div", { class: "bubble media" }, mediaNode); }
       else {
         const text = m.deleted ? "this whisper was withdrawn" : (m.text || "");
@@ -171,6 +171,20 @@
     try { SP.presence.setOnline(true); } catch (e) {}
     watchPartner(); setStatus();
     root.appendChild(Composer.build(convId, { onSent: (m) => add(m, false), convId: convId }));
+
+    // ── Push-To-Talk orb: hold to speak, release to send, slide off to cancel ──
+    const pttOrb = H.el("button", { class: "ptt-orb", title: "Hold to speak" }, "\uD83C\uDF99");
+    const pttHint = H.el("div", { class: "ptt-hint" }, "hold to speak");
+    let pressed = false;
+    function pttDown(e) { e.preventDefault(); pressed = true; if (window.PTT) PTT.start(); }
+    function pttUp() { if (!pressed) return; pressed = false; if (window.PTT) PTT.stop(false); }
+    function pttOff() { if (!pressed) return; pressed = false; if (window.PTT) PTT.stop(true); if (window.toast) toast("released \u2014 canceled"); }
+    pttOrb.addEventListener("pointerdown", pttDown);
+    pttOrb.addEventListener("pointerup", pttUp);
+    pttOrb.addEventListener("pointercancel", pttOff);
+    pttOrb.addEventListener("pointerleave", function () { if (pressed) pttOff(); });
+    if (window.PTT) PTT.onState(function (st) { pttOrb.classList.toggle("live", st === "live"); pttHint.textContent = st === "live" ? "speaking\u2026 release to send" : "hold to speak"; });
+    root.appendChild(pttOrb); root.appendChild(pttHint);
     load();
 
     return {

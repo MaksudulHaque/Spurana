@@ -68,6 +68,7 @@ const JS = [
   "wall/wall.js",
   "core/native.js",
   "core/push.js",
+  "core/ptt.js",
   "core/boot.js",       // entry point — last
 ];
 

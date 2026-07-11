@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Spurana</string>
+    <string name="title_activity_main">Spurana</string>
+    <string name="package_name">app.spurana.app</string>
+    <string name="custom_url_scheme">app.spurana.app</string>
+</resources>

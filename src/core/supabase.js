@@ -136,9 +136,11 @@
   let _activeChannel = null;
   const chat = {
     async history(convId, limit = 50) {
+      // newest N, then reversed to ascending for display — the old ascending+limit
+      // silently pinned the thread to the oldest 50 messages forever.
       const { data, error } = await sb.from("messages").select("*")
-        .eq("conv_id", convId).order("ts", { ascending: true }).limit(limit);
-      return error ? err(error) : ok(data);
+        .eq("conv_id", convId).order("ts", { ascending: false }).limit(limit);
+      return error ? err(error) : ok((data || []).reverse());
     },
     // opts: { text, type='text', url=null (storage path for media), reactions=null }
     async send(convId, opts) {

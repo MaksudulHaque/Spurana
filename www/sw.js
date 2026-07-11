@@ -1,5 +1,5 @@
-/* SPURANA service worker — auto-generated. build 0aa4615a */
-const CACHE = "spurana-0aa4615a";
+/* SPURANA service worker — auto-generated. build 4757efd0 */
+const CACHE = "spurana-4757efd0";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 const BYPASS = [/supabase\.co/, /\/realtime\//, /youtube\.com/, /youtube-nocookie\.com/, /ytimg\.com/, /googlevideo\.com/];
 self.addEventListener("install", (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {})); });

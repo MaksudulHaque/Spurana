@@ -215,3 +215,14 @@ select.input{-webkit-appearance:none;appearance:none}
 .wall-emo{padding:10px 4px;border-radius:11px;border:1px solid var(--border);background:rgba(34,22,46,.5);color:var(--text);font-family:var(--f-ui);font-size:12px;cursor:pointer;transition:var(--t)}
 .wall-emo.sel{border-color:var(--q);background:rgba(232,0,154,.18);color:var(--gold-bright)}
 .wall-emo-reply{margin-top:11px;font-family:var(--f-soul);font-style:italic;font-size:14px;color:var(--gold);min-height:20px;text-align:center}
+
+/* Akashvani — the sky orb */
+.akash-title{font-family:var(--f-sacred);font-size:30px;background:linear-gradient(120deg,var(--gold-bright),var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.akash-orb{width:150px;height:150px;border-radius:50%;border:2px solid var(--gold);font-size:52px;line-height:1;color:var(--gold-bright);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;background:radial-gradient(circle at 38% 30%,rgba(255,106,208,.45),rgba(16,8,24,.95) 62%);box-shadow:0 8px 34px rgba(0,0,0,.55);transition:transform .18s ease}
+.akash-orb.try{transform:scale(1.08);border-color:var(--q);animation:akashSeek 1s ease-in-out infinite}
+.akash-orb.live{transform:scale(1.16);border-color:var(--q-bright);animation:akashLive .9s ease-in-out infinite}
+@keyframes akashSeek{0%,100%{box-shadow:0 0 24px rgba(201,169,110,.45)}50%{box-shadow:0 0 46px rgba(201,169,110,.8)}}
+@keyframes akashLive{0%,100%{box-shadow:0 0 30px rgba(232,0,154,.55)}50%{box-shadow:0 0 60px rgba(232,0,154,.95)}}
+.akash-status{font-family:var(--f-ui);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim);min-height:16px}
+.akash-status.live{color:var(--q-bright)}
+.akash-status.try,.akash-status.flash{color:var(--gold-bright)}

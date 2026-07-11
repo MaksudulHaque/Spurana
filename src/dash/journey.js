@@ -103,6 +103,21 @@
           if (window.toast) toast(msg);
         };
         c.appendChild(tb);
+
+        // ── Sanctum Seal: biometric lock (native app) ──
+        c.appendChild(H.el("div", { class: "zc-desc", style: "margin:16px 0 6px" }, "Sanctum Seal \u2014 require your fingerprint to open Spurana"));
+        var bioBtn = H.el("button", { class: "btn btn-ghost", style: "width:100%" }, "\u2026");
+        function bioLabel() {
+          if (!window.BioLock) { bioBtn.textContent = "Native app only"; bioBtn.disabled = true; return; }
+          BioLock.available().then(function (ok) {
+            if (!ok) { bioBtn.textContent = "Biometrics unavailable on this device"; bioBtn.disabled = true; return; }
+            bioBtn.disabled = false;
+            bioBtn.textContent = BioLock.enabled() ? "Seal is ON \uD83D\uDD12 \u2014 tap to remove" : "Set the seal \uD83D\uDD12";
+          });
+        }
+        bioBtn.onclick = function () { if (!window.BioLock) return; BioLock.setEnabled(!BioLock.enabled()).then(bioLabel); };
+        bioLabel();
+        c.appendChild(bioBtn);
       }
       body.appendChild(c);
     })();

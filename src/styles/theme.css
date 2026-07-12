@@ -244,9 +244,191 @@ html[data-daypart="night"] #dashBg{background:radial-gradient(130% 90% at 50% 12
 .bio-veil{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:radial-gradient(120% 90% at 50% 10%,rgba(232,0,154,.10),transparent 60%),#060409}
 .bio-veil.on{display:flex}
 .bio-inner{text-align:center;padding:24px}
-.bio-seal{font-size:56px;color:var(--gold-bright);text-shadow:0 0 34px rgba(232,0,154,.55);animation:sealBreathe 3.4s ease-in-out infinite}
+.bio-seal{font-size:56px;color:var(--gold-bright);text-shadow:0 0 34px rgba(232,0,154,.55);}
 @keyframes sealBreathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.12);opacity:1}}
 .bio-title{font-family:var(--f-sacred);font-size:22px;color:var(--text);margin-top:14px}
 .bio-sub{font-family:var(--f-soul);font-style:italic;font-size:14px;color:var(--text-dim);margin:8px 0 22px}
 .bio-btn{display:block;margin:0 auto 12px;padding:13px 30px;border-radius:28px;border:1px solid var(--gold);background:linear-gradient(135deg,rgba(232,0,154,.25),rgba(20,10,26,.9));color:var(--gold-bright);font-family:var(--f-ui);letter-spacing:.1em;cursor:pointer}
 .bio-alt{background:none;border:none;color:var(--text-dim);font-size:12px;text-decoration:underline;cursor:pointer}
+
+/* ════════════ V3 — the living world ════════════ */
+#envBg{position:fixed;inset:0;z-index:0;pointer-events:none}
+.env-layer{position:absolute;inset:0;opacity:0;transition:opacity 1.4s ease}
+.env-layer.on{opacity:1}
+#app{position:relative;z-index:1}
+html[data-env] #dashBg{background:radial-gradient(130% 90% at 50% 6%,var(--env-g1),transparent 58%),radial-gradient(120% 80% at 50% 100%,var(--env-g2),transparent 62%),var(--void)}
+
+/* boot veil — the first breath */
+#bootVeil{position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(120% 90% at 50% 8%,rgba(232,0,154,.12),transparent 60%),#060409;transition:opacity .9s ease,transform .9s ease}
+#bootVeil.lift{opacity:0;transform:scale(1.06);pointer-events:none}
+.bv-mark{font-size:52px;color:var(--gold-bright);text-shadow:0 0 40px rgba(232,0,154,.6);}
+@keyframes bvBreathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.16);opacity:1}}
+.bv-word{font-family:var(--f-sacred);font-size:26px;letter-spacing:.42em;margin:16px 0 6px;padding-left:.42em;background:linear-gradient(120deg,var(--gold),var(--gold-bright) 45%,var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:bvRise .9s cubic-bezier(.2,.8,.2,1) both .15s}
+.bv-sub{font-family:var(--f-soul);font-style:italic;font-size:13px;color:var(--text-dim);animation:bvRise .9s cubic-bezier(.2,.8,.2,1) both .35s}
+@keyframes bvRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* screen transitions */
+#app.screen-in>*{animation:screenIn .32s cubic-bezier(.2,.8,.2,1) both}
+@keyframes screenIn{from{opacity:0;transform:translateY(10px) scale(.992)}to{opacity:1;transform:none}}
+[data-perf="lite"] #app.screen-in>*,[data-perf="lite"] .env-layer,[data-perf="lite"] .bv-mark{animation:none;transition:none}
+
+/* professional settings + alignment tokens */
+.card{padding:18px;border-radius:18px}
+.f-label{font-family:var(--f-ui);font-size:10px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);opacity:.9}
+.btn{min-height:48px;border-radius:13px}
+.input{min-height:48px;border-radius:13px}
+.env-now{font-size:15px}
+.env-now-bn{font-family:var(--f-sacred);font-size:20px;background:linear-gradient(120deg,var(--gold-bright),var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.env-now-en{font-family:var(--f-ui);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim)}
+.env-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.env-sw{display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 6px;border-radius:14px;border:1px solid var(--border);background:rgba(20,10,26,.5);cursor:pointer;transition:var(--t)}
+.env-sw.on{border-color:var(--q);box-shadow:var(--glow-q-sm)}
+.env-dot{width:22px;height:22px;border-radius:50%;box-shadow:0 0 12px rgba(0,0,0,.4)}
+.env-sw-bn{font-family:var(--f-sacred);font-size:13px;color:var(--text)}
+.env-sw-en{font-family:var(--f-ui);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim)}
+
+/* ════════ Spurana identity ════════ */
+.sp-wordmark{display:inline-flex;align-items:center;gap:10px;justify-content:center}
+.sp-word{font-family:var(--f-sacred);font-size:19px;letter-spacing:.4em;padding-left:.4em;background:linear-gradient(120deg,var(--gold),var(--gold-bright) 45%,var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.bv-mark svg,.bio-seal svg{display:block}
+
+/* bilingual two-line tile labels — distinct spaces, equal presence */
+.s-title-bn{font-family:var(--f-sacred);font-size:15px;line-height:1.25;color:var(--text);letter-spacing:.01em}
+.s-title-en{font-family:var(--f-ui);font-size:9.5px;line-height:1.3;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim);margin-top:3px}
+
+/* more prominent, full-bleed tiles */
+.s-grid{gap:12px}
+.s-tile{padding:18px 12px;border-radius:18px;min-height:118px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;background:linear-gradient(160deg,rgba(30,16,38,.42),rgba(12,7,18,.30));border:1px solid var(--border);transition:transform .22s cubic-bezier(.2,.8,.2,1),border-color .22s,box-shadow .22s}
+.s-tile:active{transform:scale(.96)}
+.s-tile:hover{border-color:var(--q);box-shadow:0 8px 26px rgba(232,0,154,.14)}
+.s-ico{font-size:26px;line-height:1;height:34px;display:flex;align-items:center;justify-content:center}
+.s-ico svg{width:30px;height:30px}
+.s-section{font-family:var(--f-ui);font-size:10px;letter-spacing:.34em;text-transform:uppercase;color:var(--gold);opacity:.85;margin:22px 4px 12px}
+
+/* content breathes edge-to-edge */
+.pad{padding:18px}
+.scroll{padding-left:16px;padding-right:16px}
+
+/* single-language tile label (honors the toggle) */
+.s-title-lead{line-height:1.28;color:var(--text)}
+.s-title-lead.bn{font-family:var(--f-sacred);font-size:16px;letter-spacing:.01em}
+.s-title-lead.en{font-family:var(--f-ui);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--text)}
+
+/* ════════════ V4 — sacred identity & locks ════════════ */
+
+/* idle veil — the re-entry orb (NOT a star) */
+#idleVeil{position:fixed;inset:0;z-index:9997;display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:radial-gradient(130% 100% at 50% 40%,rgba(232,0,154,.10),transparent 62%),rgba(6,4,9,.90);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);opacity:0;transition:opacity .8s ease}
+#idleVeil.on{display:flex;opacity:1}
+.idle-ring{position:relative;width:150px;height:150px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.idle-ring::before{content:"";position:absolute;inset:0;border-radius:50%;padding:2px;background:conic-gradient(from 0deg,var(--gold-bright),var(--q-bright),var(--gold-bright));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:idleSpin 8s linear infinite}
+@keyframes idleSpin{to{transform:rotate(360deg)}}
+.idle-orb{width:112px;height:112px;border-radius:50%;background:radial-gradient(circle at 40% 34%,rgba(255,106,208,.28),rgba(16,8,24,.96) 70%);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 30px rgba(232,0,154,.25)}
+.idle-orb svg{width:64px;height:64px}
+.idle-word{font-family:var(--f-sacred);font-size:22px;letter-spacing:.42em;padding-left:.42em;background:linear-gradient(120deg,var(--gold),var(--gold-bright) 45%,var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.idle-hint{font-family:var(--f-ui);font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--text-dim)}
+[data-perf="lite"] .idle-ring::before{animation:none}
+
+/* code / pattern lock veil */
+#codeVeil{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:radial-gradient(130% 100% at 50% 20%,rgba(232,0,154,.10),transparent 60%),#060409;opacity:0;transition:opacity .3s ease}
+#codeVeil.on{opacity:1}
+.code-inner{text-align:center;padding:26px;width:min(360px,90vw)}
+.code-sigil svg{width:48px;height:48px}
+.code-title{font-family:var(--f-sacred);font-size:21px;color:var(--text);margin-top:12px}
+.code-sub{font-family:var(--f-soul);font-style:italic;color:var(--text-dim);font-size:13px;margin:6px 0 22px}
+.lock-pad{display:flex;flex-direction:column;align-items:center}
+.pat-box{position:relative;width:230px;height:230px;display:grid;grid-template-columns:repeat(3,1fr);place-items:center;touch-action:none}
+.pat-dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--border);background:rgba(20,10,26,.6);transition:.15s}
+.pat-dot.on{border-color:var(--q-bright);background:radial-gradient(circle,var(--q-bright),transparent);box-shadow:0 0 16px rgba(232,0,154,.6)}
+.pat-line{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.pin-dots{display:flex;gap:12px;justify-content:center;margin-bottom:24px}
+.pin-d{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--border);transition:.15s}
+.pin-d.on{background:var(--q-bright);border-color:var(--q-bright);box-shadow:0 0 12px rgba(232,0,154,.6)}
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:260px;margin:0 auto}
+.pin-key{width:70px;height:70px;border-radius:50%;border:1px solid var(--border);background:rgba(20,10,26,.55);color:var(--text);font-family:var(--f-sacred);font-size:26px;cursor:pointer;transition:.15s}
+.pin-key:active{transform:scale(.92);border-color:var(--q);background:rgba(232,0,154,.18)}
+
+/* Souls waiting screen — DREED + zodiac sigil, aligned */
+.soul-await{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:64vh;text-align:center;padding:24px}
+.soul-await-sigil{width:120px;height:120px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 40% 34%,rgba(232,0,154,.14),rgba(16,8,24,.85) 70%);border:1px solid var(--gold);box-shadow:0 0 40px rgba(232,0,154,.2)}
+.soul-await-sigil svg{width:92px;height:92px}
+.soul-await-name{font-family:var(--f-sacred);font-size:30px;background:linear-gradient(120deg,var(--gold-bright),var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;letter-spacing:.06em}
+.soul-await-sub{font-family:var(--f-soul);font-style:italic;color:var(--text-dim);font-size:14px}
+.soul-await-code{margin-top:16px;opacity:.7}
+
+/* zodiac avatars in conversation rows */
+.avatar-sigil{display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 40% 34%,rgba(232,0,154,.16),rgba(16,8,24,.9) 72%)!important;border:1px solid var(--gold)}
+.avatar-sigil svg{width:34px;height:34px}
+
+/* bigger, more accessible sacred tiles */
+.s-tile{min-height:130px;padding:20px 14px;gap:9px}
+.s-ico{font-size:30px;height:40px}
+.s-ico svg{width:36px;height:36px}
+.s-title-lead.bn{font-size:17px}
+.s-title-lead.en{font-size:13px}
+.s-title-rom{font-family:var(--f-ui);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);opacity:.7;margin-top:2px}
+
+/* ════════ V4 · boot logo (V1 layered, timezone color) ════════ */
+#bootVeil .bv-logo{position:relative;height:52px}
+.bv-layer{position:absolute;left:50%;top:0;transform:translateX(-50%);font-family:var(--f-sacred);font-size:40px;letter-spacing:.4em;padding-left:.4em;white-space:nowrap}
+.bv-layer.l1{opacity:.35;transform:translate(calc(-50% - 3px),3px)}
+.bv-layer.l2{opacity:.35;transform:translate(calc(-50% + 3px),-3px)}
+.bv-layer.l3{opacity:1}
+#bootVeil .bv-logo{animation:bvRise .9s cubic-bezier(.2,.8,.2,1) both}
+
+/* ════════ Souls screen — centered, aligned ════════ */
+.soul-await{min-height:74vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px}
+.soul-await-halo{width:150px;height:150px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(232,0,154,.14),transparent 70%);border:1px solid var(--border)}
+.soul-await-sigil svg{width:92px;height:92px}
+.soul-await-name{font-family:var(--f-sacred);font-size:30px;background:linear-gradient(120deg,var(--gold-bright),var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.soul-await-sign{font-family:var(--f-ui);font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--gold)}
+.soul-await-sub{font-family:var(--f-soul);font-style:italic;color:var(--text-dim);font-size:14px;max-width:280px}
+
+/* ════════ Pattern & PIN lock veils ════════ */
+.lock-veil{position:fixed;inset:0;z-index:10001;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:radial-gradient(120% 90% at 50% 8%,rgba(232,0,154,.12),transparent 60%),#060409}
+.lock-veil.on{display:flex}
+.lock-mark svg{display:block}
+.lock-title{font-family:var(--f-sacred);font-size:22px;color:var(--text)}
+.lock-sub{font-family:var(--f-soul);font-style:italic;color:var(--text-dim);font-size:13px;margin-bottom:10px}
+.pin-dots{display:flex;gap:14px;justify-content:center;margin-bottom:20px}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--gold)}
+.pin-dot.f{background:var(--q-bright);border-color:var(--q-bright);box-shadow:0 0 12px rgba(232,0,154,.6)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,72px);gap:14px}
+.pin-key{width:72px;height:72px;border-radius:50%;border:1px solid var(--border);background:rgba(20,10,26,.6);color:var(--text);font-family:var(--f-sacred);font-size:26px;cursor:pointer;transition:transform .1s ease,background .2s}
+.pin-key:active{transform:scale(.92);background:rgba(232,0,154,.22)}
+.pin-key.ghost{visibility:hidden}
+.lock-go{margin-top:20px;padding:13px 40px;border-radius:26px;border:none;background:linear-gradient(135deg,var(--q),var(--q-bright));color:#fff;font-family:var(--f-ui);letter-spacing:.1em;cursor:pointer}
+.pat-wrap{width:280px;height:280px}
+.pat-svg{width:100%;height:100%;touch-action:none}
+.pat-node{fill:rgba(20,10,26,.6);stroke:var(--border);stroke-width:2;transition:fill .15s}
+.pat-node.on{fill:var(--q-bright);stroke:var(--gold-bright);filter:drop-shadow(0 0 8px rgba(232,0,154,.7))}
+.pat-line{fill:none;stroke:url(#zsg,var(--q-bright));stroke:var(--q-bright);stroke-width:5;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+
+/* ════════ V4.1 · vibrant gradients + unified icons ════════ */
+/* richer dashboard aura — three luminous bands */
+html[data-env] #dashBg,#dashBg{
+  background:
+    radial-gradient(90% 60% at 20% 4%, var(--env-g1), transparent 55%),
+    radial-gradient(90% 60% at 85% 12%, var(--env-g2), transparent 55%),
+    radial-gradient(120% 90% at 50% 108%, var(--q-bright), transparent 62%),
+    var(--void) !important;
+}
+#envBg .env-layer{mix-blend-mode:screen}
+
+/* unified icon presentation — bigger, glowing, consistent */
+.s-ico{height:42px;display:flex;align-items:center;justify-content:center;margin-bottom:2px}
+.s-ico svg{width:34px;height:34px;filter:drop-shadow(0 2px 8px rgba(232,0,154,.28))}
+
+/* tiles: bigger text, richer glass, more vibrant hover */
+.s-tile{min-height:126px;padding:20px 12px;background:linear-gradient(158deg,rgba(40,18,52,.5),rgba(14,8,22,.34));border:1px solid rgba(201,169,110,.18)}
+.s-tile:hover,.s-tile:active{border-color:var(--q-bright);box-shadow:0 10px 30px rgba(232,0,154,.22),inset 0 0 24px rgba(232,0,154,.06)}
+.s-title-lead{font-size:16px;line-height:1.24}
+.s-title-lead.bn{font-size:17px}
+.s-title-rom{font-family:var(--f-ui);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim);margin-top:3px}
+.s-section{font-size:11px;letter-spacing:.36em;color:var(--gold-bright);opacity:.9;margin:26px 4px 14px}
+
+/* buttons: richer gradient */
+.btn-primary{background:linear-gradient(135deg,var(--q),var(--q-bright) 70%,var(--gold-bright));border:none;box-shadow:0 4px 18px rgba(232,0,154,.32)}
+
+/* settings: clean grouped section cards */
+.set-card{background:linear-gradient(158deg,rgba(34,16,46,.5),rgba(12,7,18,.4));border:1px solid rgba(201,169,110,.16);border-radius:20px;padding:20px;margin-bottom:16px}
+.set-card .f-label{margin-bottom:12px}

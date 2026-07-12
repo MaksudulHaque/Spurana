@@ -18,11 +18,8 @@
     const list = H.el("div", { class: "grow scroll" });
     root.appendChild(list);
 
-    // bottom action bar (hidden in the empty state, which has its own CTAs)
-    const actions = H.el("div", { class: "pad row spread", style: "border-top:1px solid var(--border)" }, [
-      H.el("button", { class: "btn btn-ghost", onClick: () => Router.go("redeem") }, "Enter a code"),
-      H.el("button", { class: "btn btn-primary", onClick: () => Router.go("invite") }, "Invite ✦"),
-    ]);
+    // (invite bar intentionally hidden — the bond is private; join via code only)
+    const actions = H.el("div", { style: "display:none" });
     root.appendChild(actions);
 
     async function load() {
@@ -69,7 +66,7 @@
         APP.partner = { uid: r.puid, name: r.name };
         Router.go("thread", { c: r.conv });
       } }, [
-        H.el("div", { class: "avatar" }, H.initials(r.name)),
+        (function(){ var a=H.el("div",{class:"avatar avatar-sigil"}); if(window.Souls) a.innerHTML=Souls.sign(Souls.signFor(r.puid),34); else a.textContent=H.initials(r.name); return a; })(),
         H.el("div", { class: "meta" }, [
           H.el("div", { class: "nm" }, r.name),
           H.el("div", { class: "pv" }, r.preview),
@@ -78,11 +75,15 @@
     }
 
     function emptyState() {
-      return H.el("div", { class: "empty reveal" }, [
-        H.el("div", { class: "big" }, "Your sanctuary awaits"),
-        H.el("p", { class: "muted" }, "Bond with one soul to begin. Send them an invite, or enter a code they’ve shared with you."),
-        H.el("button", { class: "btn btn-primary", onClick: () => Router.go("invite") }, "Invite your beloved ✦"),
-        H.el("button", { class: "btn btn-ghost", onClick: () => Router.go("redeem") }, "I have a code"),
+      var myName = (APP.profile && APP.profile.name) || (APP.me && APP.me.name) || "You";
+      var mySign = (window.Souls && APP.me) ? Souls.signFor(APP.me.id) : "taurus";
+      var glyph = H.el("div", { class: "soul-await-sigil" });
+      if (window.Souls) glyph.innerHTML = Souls.sign(mySign, 92);
+      return H.el("div", { class: "soul-await reveal" }, [
+        H.el("div", { class: "soul-await-halo" }, [glyph]),
+        H.el("div", { class: "soul-await-name" }, myName),
+        H.el("div", { class: "soul-await-sign" }, (mySign.charAt(0).toUpperCase() + mySign.slice(1)) + " \u00b7 a soul in waiting"),
+        H.el("div", { class: "soul-await-sub" }, "When your beloved joins, they will appear here."),
       ]);
     }
 
@@ -98,7 +99,7 @@
       }, [
         H.el("div", { class: "muted center", style: "font-size:13px;font-family:var(--f-tech);letter-spacing:.05em;word-break:break-all" }, who),
         H.el("button", { class: "btn btn-ghost btn-block", onClick: () => { close(); Router.go("invite"); } }, "Invite a soul"),
-        H.el("button", { class: "btn btn-ghost btn-block", onClick: () => { close(); Router.go("sanctuary"); } }, "\u2726 The Sanctuary"),
+        H.el("button", { class: "btn btn-ghost btn-block", onClick: () => { close(); Router.go("sanctuary"); } }, "The Sanctuary"),
         H.el("button", { class: "btn btn-ghost btn-block", onClick: () => { close(); Router.go("settings"); } }, "Settings"),
         H.el("button", { class: "btn btn-ghost btn-block", onClick: () => { close(); Router.go("innerjourney"); } }, "Inner Journey \uD83E\uDEB7"),
         H.el("button", { class: "btn btn-danger btn-block", onClick: async () => { close(); await Session.logout(); } }, "Sign out"),

@@ -15,7 +15,7 @@
     return new Date(t).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
   }
   const KINDS = {
-    signup: { i: "\u2726", t: "Awakened into Spurana" },
+    signup: { i: "\u25C8", t: "Awakened into Spurana" },
     login: { i: "\u263D", t: "Returned to the sanctuary" },
     pair_redeem: { i: "\uD83D\uDD17", t: "Bonded with a soul" },
     pair_create: { i: "\u2709", t: "Sent an invitation" },
@@ -27,13 +27,82 @@
     const body = H.el("div", { class: "pad scroll grow stack reveal" });
     root.appendChild(body);
 
+    // ── Environment: the living world ──
+    (function () {
+      if (!window.Env) return;
+      var c = H.el("div", { class: "card stack set-card", style: "gap:12px" });
+      c.appendChild(H.el("div", { class: "f-label" }, "Environment \u2014 the living world"));
+      var curLine = H.el("div", { class: "env-now" }, "");
+      function nowLine() {
+        var e = Env.current();
+        curLine.innerHTML = "";
+        if (!e) return;
+        curLine.appendChild(H.el("span", { class: "env-now-bn" }, e.bn));
+        curLine.appendChild(H.el("span", { class: "env-now-en" }, "  \u00b7  " + e.en + (Env.pinned() ? "  \u00b7 pinned" : "  \u00b7 living")));
+      }
+      var modeRow = H.el("div", { class: "row", style: "gap:8px" });
+      var autoBtn = H.el("button", { class: "btn", style: "flex:1" }, "Auto \u2014 let it live");
+      var pickWrap = H.el("div", { class: "env-grid" });
+      function paintButtons() {
+        var pinned = !!Env.pinned();
+        autoBtn.className = "btn " + (pinned ? "btn-ghost" : "btn-primary");
+        pickWrap.style.display = pinned ? "grid" : "grid";
+        Array.prototype.forEach.call(pickWrap.children, function (sw) { sw.classList.toggle("on", sw.dataset.id === Env.pinned()); });
+        nowLine();
+      }
+      autoBtn.onclick = function () { Env.pin(null); paintButtons(); toast("The world lives on its own"); };
+      modeRow.appendChild(autoBtn);
+      Env.list().forEach(function (e) {
+        var sw = H.el("button", { class: "env-sw", title: e.en });
+        sw.dataset.id = e.id;
+        var dot = H.el("span", { class: "env-dot" });
+        dot.style.background = "linear-gradient(135deg," + e.qb + "," + e.goldb + ")";
+        sw.appendChild(dot);
+        sw.appendChild(H.el("span", { class: "env-sw-bn" }, e.bn));
+        sw.appendChild(H.el("span", { class: "env-sw-en" }, e.en));
+        sw.onclick = function () { Env.pin(e.id); paintButtons(); };
+        pickWrap.appendChild(sw);
+      });
+      c.appendChild(curLine); c.appendChild(modeRow); c.appendChild(pickWrap);
+      Env.onChange(nowLine);
+      paintButtons();
+      body.appendChild(c);
+    })();
+
+    // ── Trusted Soul pact ──
+    (function () {
+      if (!window.Wing) return;
+      var c = H.el("div", { class: "card stack set-card", style: "gap:12px" });
+      c.appendChild(H.el("div", { class: "f-label" }, "Trusted Soul"));
+      var line = H.el("p", { class: "muted", style: "font-family:var(--f-soul);font-style:italic;margin:0;font-size:13px" }, "Loading\u2026");
+      var btn = H.el("button", { class: "btn btn-ghost", style: "width:100%" }, "\u2026");
+      c.appendChild(line); c.appendChild(btn);
+      body.appendChild(c);
+      (async function () {
+        var ok = await Wing.resolve(); if (!ok) { line.textContent = "Bond with a soul to grant trust."; btn.style.display = "none"; return; }
+        var nm = Wing.partnerName();
+        async function refresh() {
+          var mine = await Wing.iTrust(), theirs = await Wing.theyTrust();
+          line.innerHTML = "";
+          line.appendChild(document.createTextNode(
+            (mine ? ("You let " + nm + " open live-sight with you instantly. ") : ("" + nm + " must accept when you reach for live-sight. ")) +
+            (theirs ? (nm + " trusts you \u2014 your live-sight opens on their side at once.") : (nm + " hasn't granted you instant trust yet."))
+          ));
+          btn.className = "btn " + (mine ? "btn-ghost" : "btn-primary");
+          btn.textContent = mine ? ("Withdraw trust from " + nm) : ("Make " + nm + " a Trusted Soul");
+        }
+        btn.onclick = async function () { var mine = await Wing.iTrust(); await Wing.setTrust(!mine); refresh(); };
+        refresh();
+      })();
+    })();
+
     // name editor (fixes empty display names)
     const name = H.el("input", { class: "input", value: (APP.profile && APP.profile.name) || "", placeholder: "Your name" });
     const save = H.el("button", { class: "btn btn-primary", onClick: async () => {
       const v = name.value.trim(); if (!v) { toast("Enter a name.", true); return; }
       const { error } = await SP.profile.update({ name: v });
       if (error) { toast("Couldn't save.", true); return; }
-      APP.profile = APP.profile || {}; APP.profile.name = v; toast("Saved \u2726");
+      APP.profile = APP.profile || {}; APP.profile.name = v; toast("Saved");
     } }, "Save");
     body.appendChild(H.el("div", { class: "card" }, [
       H.el("div", { class: "f-label" }, "Your name"),
@@ -119,13 +188,48 @@
         bioLabel();
         c.appendChild(bioBtn);
 
+        // ── Pattern / PIN sanctum lock ──
+        c.appendChild(H.el("div", { class: "zc-desc", style: "margin:16px 0 6px" }, "Pattern or PIN \u2014 seal the app with a code"));
+        var lockRow = H.el("div", { class: "row", style: "gap:8px" });
+        var patBtn = H.el("button", { class: "btn btn-ghost", style: "flex:1" }, "Pattern");
+        var pinBtn = H.el("button", { class: "btn btn-ghost", style: "flex:1" }, "PIN");
+        var offBtn = H.el("button", { class: "btn btn-ghost", style: "flex:1" }, "Off");
+        function lockLabel() {
+          if (!window.CodeLock) { patBtn.disabled = pinBtn.disabled = true; return; }
+          var m = CodeLock.mode();
+          patBtn.className = "btn " + (m === "pattern" ? "btn-primary" : "btn-ghost");
+          pinBtn.className = "btn " + (m === "pin" ? "btn-primary" : "btn-ghost");
+          offBtn.className = "btn " + (m === "off" ? "btn-primary" : "btn-ghost");
+        }
+        patBtn.onclick = function () { if (window.CodeLock) CodeLock.setup("pattern", lockLabel); };
+        pinBtn.onclick = function () { if (window.CodeLock) CodeLock.setup("pin", lockLabel); };
+        offBtn.onclick = function () { if (window.CodeLock) CodeLock.clear(lockLabel); };
+        lockRow.append(patBtn, pinBtn, offBtn);
+        c.appendChild(lockRow);
+        lockLabel();
+
+        // ── Idle veil delay ──
+        c.appendChild(H.el("div", { class: "zc-desc", style: "margin:16px 0 6px" }, "Idle veil \u2014 the re-entry orb after stillness"));
+        var idleRow = H.el("div", { class: "row", style: "gap:8px" });
+        [["Off", 0], ["60s", 60], ["2m", 120], ["5m", 300]].forEach(function (opt) {
+          var b = H.el("button", { class: "btn btn-ghost", style: "flex:1" }, opt[0]);
+          b.onclick = function () {
+            if (!window.Idle) return;
+            if (opt[1] === 0) { Idle.set(false); try { localStorage.setItem("spurana.idle", "0"); } catch (e) {} }
+            else { Idle.set(true); Idle.setDelay(opt[1]); try { localStorage.setItem("spurana.idle", "1"); localStorage.setItem("spurana.idle.sec", String(opt[1])); } catch (e) {} }
+            Array.prototype.forEach.call(idleRow.children, function (x) { x.className = "btn btn-ghost"; }); b.className = "btn btn-primary";
+          };
+          idleRow.appendChild(b);
+        });
+        c.appendChild(idleRow);
+
         // ── Soul Bubble: floating chat head over every app ──
-        c.appendChild(H.el("div", { class: "zc-desc", style: "margin:16px 0 6px" }, "Soul Bubble \u2014 a floating \u2726 over every app; tap it to open your chat"));
+        c.appendChild(H.el("div", { class: "zc-desc", style: "margin:16px 0 6px" }, "Soul Bubble \u2014 a floating orb over every app; tap it to open your chat"));
         var bubBtn = H.el("button", { class: "btn btn-ghost", style: "width:100%" }, "\u2026");
         function bubLabel() {
           if (!window.SoulBubbleJS || !SoulBubbleJS.available()) { bubBtn.textContent = "Native app only"; bubBtn.disabled = true; return; }
           bubBtn.disabled = false;
-          bubBtn.textContent = SoulBubbleJS.enabled() ? "Bubble is floating \u2726 \u2014 tap to rest it" : "Release the bubble \u2726";
+          bubBtn.textContent = SoulBubbleJS.enabled() ? "Bubble is floating \u2014 tap to rest it" : "Release the bubble";
         }
         bubBtn.onclick = function () { if (!window.SoulBubbleJS) return; SoulBubbleJS.setEnabled(!SoulBubbleJS.enabled()).then(bubLabel); };
         bubLabel();

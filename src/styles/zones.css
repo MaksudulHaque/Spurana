@@ -232,7 +232,7 @@ select.input{-webkit-appearance:none;appearance:none}
 .antor-remote{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#0a0610;opacity:0;transition:opacity .6s ease}
 .antor-stage.connected .antor-remote{opacity:1}
 .antor-local{position:absolute;right:14px;top:14px;width:104px;height:150px;object-fit:cover;border-radius:16px;border:1px solid var(--gold);box-shadow:0 6px 20px rgba(0,0,0,.55);background:#140a1a;z-index:3;transform:scaleX(-1)}
-.antor-presence{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:64px;color:var(--gold-bright);text-shadow:0 0 40px rgba(232,0,154,.5);opacity:.9;transition:opacity .5s ease;animation:antorBreathe 3.6s ease-in-out infinite;z-index:1}
+.antor-presence{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:64px;color:var(--gold-bright);text-shadow:0 0 40px rgba(232,0,154,.5);opacity:.9;transition:opacity .5s ease;z-index:1}
 .antor-presence.on{opacity:0}
 .antor-stage.connected .antor-presence{opacity:0}
 @keyframes antorBreathe{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.7}50%{transform:translate(-50%,-50%) scale(1.14);opacity:1}}
@@ -244,3 +244,19 @@ select.input{-webkit-appearance:none;appearance:none}
 .antor-ctl:active{transform:scale(.9)}
 .antor-ctl.off{background:rgba(232,0,154,.28);border-color:var(--q)}
 .antor-ctl.end{background:rgba(220,40,60,.85);border:none;color:#fff}
+
+/* Soul Tides */
+.tide-orb{font-size:46px;}
+.tide-big{font-family:var(--f-sacred);font-size:44px;background:linear-gradient(120deg,var(--gold-bright),var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.tide-big.low{background:linear-gradient(120deg,#ff7a5f,#e8009a);-webkit-background-clip:text;background-clip:text}
+.tide-rows{display:flex;flex-direction:column;gap:6px;width:100%}
+.tide-line{font-family:var(--f-ui);font-size:12px;letter-spacing:.06em;color:var(--text);text-align:center}
+.tide-line.dim{color:var(--text-dim);font-size:11px}
+
+/* Sacred meditation chooser */
+.med-card{width:100%;text-align:left;padding:18px 20px;border-radius:18px;border:1px solid var(--border);background:linear-gradient(160deg,rgba(30,16,38,.5),rgba(12,7,18,.35));cursor:pointer;transition:transform .2s ease,border-color .2s,box-shadow .2s;display:flex;flex-direction:column;gap:4px}
+.med-card:active{transform:scale(.98)}
+.med-card:hover{border-color:var(--q);box-shadow:0 8px 26px rgba(232,0,154,.14)}
+.med-card-bn{font-family:var(--f-sacred);font-size:19px;color:var(--text)}
+.med-card-en{font-family:var(--f-soul);font-style:italic;font-size:13px;color:var(--text-dim)}
+.med-card-min{font-family:var(--f-ui);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-top:4px}

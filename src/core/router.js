@@ -50,6 +50,7 @@
     mounted = name;
     try {
       current = fn(root, query) || {};
+      root.classList.remove("screen-in"); void root.offsetWidth; root.classList.add("screen-in");
     } catch (e) {
       console.error("[router] screen error:", name, e);
       root.appendChild(H.el("div", { class: "pad center muted" }, "Something went wrong loading this screen."));

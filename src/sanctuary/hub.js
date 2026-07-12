@@ -37,10 +37,11 @@
       ["\uD83C\uDFB5", "Listen Together", "music in sync", () => withConv(() => Router.go("listen"))],
       ["\uD83C\uDF00", "Pratidhwani", "spaced echo room", () => withConv(() => Router.go("pratidhwani"))],
       ["\uD83E\uDEE5", "Vanish Mode", "vanishing channel", () => withConv(() => Router.go("vanish"))],
-      ["\u2726", "Souls", "your souls", () => Router.go("chat")],
+      ["__SIGIL__", "Souls", "your souls", () => Router.go("chat")],
       ["\uD83E\uDDED", "Track Souls", "live location", () => withConv(() => Router.go("track"))],
       ["\u26A1", "Akashvani", "emergency live voice", () => withConv(() => Router.go("akash"))],
       ["\uD83D\uDC41\uFE0F", "Antordrishti", "live sight \u00b7 always on", () => withConv(() => Router.go("antor"))],
+      ["\uD83C\uDF0A", "Soul Tides", "feel their world", () => withConv(() => Router.go("tides"))],
     ]],
     ["Journey Inward", [
       ["\uD83E\uDDD8", "Meditation Zone", "fully guided", () => Router.go("meditation")],
@@ -104,16 +105,18 @@
       const grid = H.el("div", { class: "s-grid" });
       tiles.forEach(([icon, title, sub, fn]) => {
         const ic = H.el("div", { class: "s-ico" });
-        if (window.ICONS && window.ICONS[title]) ic.innerHTML = window.ICONS[title]; else ic.textContent = icon;
+        if (icon === "__SIGIL__" && window.Brand) ic.innerHTML = Brand.sigil(30); else if (window.ICONS && window.ICONS[title]) ic.innerHTML = window.ICONS[title]; else ic.textContent = icon;
+        var tt = window.tl ? tl(title) : { lead: title, sub: "" };
+        var isBn = (window.LANG === "bn");
         grid.appendChild(H.el("button", { class: "s-tile", onClick: fn }, [
           ic,
-          H.el("div", { class: "s-title" }, title),
-          sub ? H.el("div", { class: "s-tsub" }, sub) : null,
+          H.el("div", { class: isBn ? "s-title-lead bn" : "s-title-lead en" }, tt.lead),
+          tt.sub ? H.el("div", { class: "s-title-rom" }, tt.sub) : null,
         ]));
       });
       scroll.appendChild(grid);
     });
-    scroll.appendChild(H.el("div", { class: "nwp-credit", style: "padding:24px 0 40px" }, "NWP \u00b7 Sacred Architecture \u00b7 v6 \u00b7 2026"));
+    var cred = H.el("div", { class: "nwp-credit", style: "padding:24px 0 40px;text-align:center" }); if (window.Brand) cred.innerHTML = Brand.wordmark(24) + '<div style="font-family:var(--f-ui);font-size:9px;letter-spacing:.3em;color:var(--text-dim);margin-top:8px">\u09b8\u09cd\u09aa\u09c1\u09b0\u09a3 \u00b7 A SACRED SPACE FOR TWO SOULS</div>'; scroll.appendChild(cred);
     return { teardown: function () { try { document.documentElement.removeAttribute("data-screen"); if (window.startCosmos && !window._cosmicRaf) window.startCosmos(); } catch (e) {} } };
   });
 })();

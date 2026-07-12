@@ -32,7 +32,7 @@
         const a = H.el("a", { href: url, download: "spurana-my-data.json" });
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 4000);
-        toast("Your data is downloading \u2726");
+        toast("Your data is downloading");
       } catch (e) { toast("Couldn't prepare the file.", true); }
     }
 

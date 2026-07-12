@@ -172,19 +172,7 @@
     watchPartner(); setStatus();
     root.appendChild(Composer.build(convId, { onSent: (m) => add(m, false), convId: convId }));
 
-    // ── Push-To-Talk orb: hold to speak, release to send, slide off to cancel ──
-    const pttOrb = H.el("button", { class: "ptt-orb", title: "Hold to speak" }, "\uD83C\uDF99");
-    const pttHint = H.el("div", { class: "ptt-hint" }, "hold to speak");
-    let pressed = false;
-    function pttDown(e) { e.preventDefault(); pressed = true; if (window.PTT) PTT.start(); }
-    function pttUp() { if (!pressed) return; pressed = false; if (window.PTT) PTT.stop(false); }
-    function pttOff() { if (!pressed) return; pressed = false; if (window.PTT) PTT.stop(true); if (window.toast) toast("released \u2014 canceled"); }
-    pttOrb.addEventListener("pointerdown", pttDown);
-    pttOrb.addEventListener("pointerup", pttUp);
-    pttOrb.addEventListener("pointercancel", pttOff);
-    pttOrb.addEventListener("pointerleave", function () { if (pressed) pttOff(); });
-    if (window.PTT) PTT.onState(function (st) { pttOrb.classList.toggle("live", st === "live"); pttHint.textContent = st === "live" ? "speaking\u2026 release to send" : "hold to speak"; });
-    root.appendChild(pttOrb); root.appendChild(pttHint);
+    // (chat is kept clean — PTT & live actions live in the Connect wing, not floating here)
     load();
 
     return {

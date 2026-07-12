@@ -115,3 +115,32 @@
 .ptt-orb.live{transform:scale(1.22);border-color:var(--q-bright);box-shadow:0 0 30px rgba(232,0,154,.65);animation:pttPulse 1.1s ease-in-out infinite}
 @keyframes pttPulse{0%,100%{box-shadow:0 0 22px rgba(232,0,154,.5)}50%{box-shadow:0 0 42px rgba(232,0,154,.85)}}
 .ptt-hint{position:absolute;right:14px;bottom:74px;z-index:6;font-family:var(--f-ui);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);pointer-events:none;width:58px;text-align:center}
+
+/* ════════ Souls Wing — floating action orb ════════ */
+.wing-fab-wrap{position:absolute;right:16px;bottom:158px;z-index:7;display:flex;flex-direction:column-reverse;align-items:center;gap:12px}
+.wing-fab{width:60px;height:60px;border-radius:50%;border:1px solid var(--gold);background:radial-gradient(circle at 38% 30%,var(--q-bright),rgba(20,10,26,.95) 68%);color:var(--gold-bright);font-size:26px;cursor:pointer;box-shadow:0 6px 24px rgba(232,0,154,.4);transition:transform .3s cubic-bezier(.2,.9,.3,1.4);display:flex;align-items:center;justify-content:center}
+.wing-fab-wrap.open .wing-fab{transform:rotate(135deg) scale(1.05);box-shadow:0 0 34px rgba(232,0,154,.7)}
+.wing-fan{display:flex;flex-direction:column-reverse;align-items:flex-end;gap:12px;max-height:0;opacity:0;overflow:visible;transition:opacity .28s ease}
+.wing-fab-wrap.open .wing-fan{max-height:340px;opacity:1}
+.wing-act{display:flex;align-items:center;gap:10px;padding:0;border:none;background:none;cursor:pointer;transform:translateY(14px) scale(.7);opacity:0;transition:transform .34s cubic-bezier(.2,.9,.3,1.4),opacity .28s ease}
+.wing-fab-wrap.open .wing-act{transform:none;opacity:1}
+.wing-fab-wrap.open .wing-act:nth-child(1){transition-delay:.02s}
+.wing-fab-wrap.open .wing-act:nth-child(2){transition-delay:.07s}
+.wing-fab-wrap.open .wing-act:nth-child(3){transition-delay:.12s}
+.wing-act-lb{font-family:var(--f-ui);font-size:11px;letter-spacing:.06em;color:var(--text);background:rgba(20,10,26,.82);backdrop-filter:blur(8px);padding:7px 12px;border-radius:20px;border:1px solid var(--border);white-space:nowrap;box-shadow:0 3px 12px rgba(0,0,0,.4)}
+.wing-act-ic{width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;border:1px solid var(--gold);box-shadow:0 4px 16px rgba(0,0,0,.45)}
+.a-sight .wing-act-ic{background:radial-gradient(circle at 40% 32%,rgba(94,159,239,.55),rgba(20,10,26,.95) 70%)}
+.a-sky .wing-act-ic{background:radial-gradient(circle at 40% 32%,rgba(255,106,160,.55),rgba(20,10,26,.95) 70%)}
+.a-voice .wing-act-ic{background:radial-gradient(circle at 40% 32%,rgba(201,169,110,.5),rgba(20,10,26,.95) 70%)}
+
+/* the visible knock */
+.wing-knock{position:fixed;inset:0;z-index:9998;display:flex;align-items:flex-start;justify-content:center;padding-top:64px;background:rgba(6,4,9,.55);backdrop-filter:blur(4px);opacity:0;transition:opacity .3s ease}
+.wing-knock.on{opacity:1}
+.wing-knock-card{background:linear-gradient(160deg,rgba(30,16,38,.96),rgba(12,7,18,.98));border:1px solid var(--gold);border-radius:22px;padding:24px 26px;text-align:center;box-shadow:0 18px 60px rgba(0,0,0,.6);transform:translateY(-16px) scale(.96);transition:transform .34s cubic-bezier(.2,.9,.3,1.4);max-width:300px}
+.wing-knock.on .wing-knock-card{transform:none}
+.wing-knock-orb{font-size:44px;}
+.wing-knock-name{font-family:var(--f-sacred);font-size:22px;color:var(--gold-bright);margin-top:8px}
+.wing-knock-sub{font-family:var(--f-soul);font-style:italic;color:var(--text-dim);font-size:13px;margin:4px 0 18px}
+.wing-knock-row{display:flex;gap:10px}
+.wing-knock-no{flex:1;padding:12px;border-radius:24px;border:1px solid var(--border);background:none;color:var(--text-dim);cursor:pointer;font-family:var(--f-ui)}
+.wing-knock-yes{flex:1;padding:12px;border-radius:24px;border:none;background:linear-gradient(135deg,var(--q),var(--q-bright));color:#fff;cursor:pointer;font-family:var(--f-ui);letter-spacing:.06em}

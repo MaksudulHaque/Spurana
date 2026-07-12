@@ -48,7 +48,7 @@
     veil.className = "bio-veil";
     veil.innerHTML =
       '<div class="bio-inner">' +
-      '<div class="bio-seal">\u2726</div>' +
+      '<div class="bio-seal">' + (window.Brand ? Brand.sigil(60, true) : "\u2726") + '</div>' +
       '<div class="bio-title">The Sanctum is sealed</div>' +
       '<div class="bio-sub">Touch the seal to enter</div>' +
       '<button class="bio-btn" id="bioTry">Touch the seal</button>' +

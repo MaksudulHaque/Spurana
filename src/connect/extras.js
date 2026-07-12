@@ -157,4 +157,46 @@
     update();
     return { teardown() { clearInterval(tick); try { if (chDb && SP._sb) SP._sb.removeChannel(chDb); } catch (e) {} try { if (chLive && SP._sb) SP._sb.removeChannel(chLive); } catch (e) {} } };
   });
+
+  Router.register("tides", function (root) {
+    root.appendChild(topBar({ title: "Soul Tides", back: true }));
+    var body = H.el("div", { class: "pad scroll grow reveal", style: "display:flex;flex-direction:column;gap:16px" });
+    root.appendChild(body);
+
+    var pname = (window.Tides && Tides.partnerName && Tides.partnerName()) || "them";
+
+    var card = H.el("div", { class: "card stack", style: "gap:14px;align-items:center;text-align:center" });
+    var orb = H.el("div", { class: "tide-orb" }, "\uD83D\uDD0B");
+    var big = H.el("div", { class: "tide-big" }, "\u2014");
+    var sub = H.el("div", { class: "muted", style: "font-family:var(--f-soul);font-style:italic" }, "waiting for " + pname + "'s tide\u2026");
+    var rows = H.el("div", { class: "tide-rows" });
+    card.append(orb, big, sub, rows);
+    body.appendChild(card);
+
+    var toggle = H.el("button", { class: "btn", style: "width:100%" }, "\u2026");
+    function tglLabel() { if (!window.Tides) { toggle.textContent = "unavailable"; toggle.disabled = true; return; } toggle.className = "btn " + (Tides.on() ? "btn-ghost" : "btn-primary"); toggle.textContent = Tides.on() ? "Tides are flowing \u2726 \u2014 tap to still" : "Let your tides flow to " + pname + " \u2726"; }
+    toggle.onclick = function () { if (!window.Tides) return; Tides.set(!Tides.on()); tglLabel(); };
+    body.appendChild(toggle);
+    body.appendChild(H.el("p", { class: "center muted", style: "font-size:11px;opacity:.7;max-width:320px;margin:2px auto" }, "Mutual & visible \u2014 " + pname + " feels your world exactly as you feel theirs. Turn it off anytime."));
+
+    function ago(ts) { var s = Math.max(0, (Date.now() - ts) / 1000 | 0); return s < 30 ? "just now" : s < 60 ? s + "s ago" : s < 3600 ? (s / 60 | 0) + "m ago" : (s / 3600 | 0) + "h ago"; }
+    function render(st) {
+      if (!st) return;
+      orb.textContent = st.charging ? "\u26A1" : "\uD83D\uDD0B";
+      if (typeof st.battery === "number") { big.textContent = st.battery + "%"; big.className = "tide-big" + (st.battery <= 15 && !st.charging ? " low" : ""); }
+      var bits = [];
+      bits.push(st.charging ? (pname + " is charging \u2014 resting") : (st.active ? (pname + " is here, now") : (pname + " is away")));
+      if (st.motion === "moving") bits.push("on the move");
+      else if (st.motion === "still" && !st.active) bits.push("still \u2014 perhaps asleep \uD83C\uDF19");
+      if (typeof st.active_seconds_today === "number") bits.push("in Spurana " + Math.round(st.active_seconds_today / 60) + " min today");
+      sub.textContent = bits[0] || "";
+      rows.innerHTML = "";
+      bits.slice(1).forEach(function (b) { rows.appendChild(H.el("div", { class: "tide-line" }, b)); });
+      rows.appendChild(H.el("div", { class: "tide-line dim" }, "last light: " + ago(new Date(st.updated_at).getTime())));
+    }
+    if (window.Tides) Tides.onTheirs(render);
+    tglLabel();
+    return { teardown: function () {} };
+  });
+
 })();

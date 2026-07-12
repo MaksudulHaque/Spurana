@@ -51,22 +51,54 @@
       bn.sort(function (a, b) { return score(b, HER) - score(a, HER); });
       return bn[0] || null;
     }
+    // Android/Chrome WebView blocks speech until a user gesture — unlock once.
+    var voiceUnlocked = false;
+    function unlockVoice() {
+      if (voiceUnlocked || !window.speechSynthesis) return;
+      try {
+        var u = new SpeechSynthesisUtterance(" ");
+        u.volume = 0; speechSynthesis.speak(u); voiceUnlocked = true;
+      } catch (e) {}
+    }
+    try {
+      ["pointerdown", "touchstart", "click"].forEach(function (ev) {
+        document.addEventListener(ev, unlockVoice, { once: false, passive: true });
+      });
+    } catch (e) {}
+
+    // Chrome cuts synthesis at ~15s — keep it alive by pulsing pause/resume.
+    var keepAlive = null;
+    function startKeepAlive() {
+      try { if (keepAlive) return; keepAlive = setInterval(function () {
+        try { if (speechSynthesis.speaking) { speechSynthesis.pause(); speechSynthesis.resume(); } else { clearInterval(keepAlive); keepAlive = null; } } catch (e) {}
+      }, 9000); } catch (e) {}
+    }
+
+    var bnMissingWarned = false;
     function deviceSpeak(text) {
       if (!st.on || !text || !window.speechSynthesis) return;
+      unlockVoice();
       try {
         speechSynthesis.cancel();
         var u = new SpeechSynthesisUtterance(text);
         if (isBangla(text)) {
           var bv = pickBn();
-          if (bv) { u.voice = bv; u.lang = bv.lang; } else { u.lang = "bn-IN"; }   // device Bangla voice
-          u.rate = 0.84; u.pitch = 1.0;
+          if (bv) { u.voice = bv; u.lang = bv.lang; u.rate = 0.84; u.pitch = 1.0; }
+          else {
+            // no Bengali voice on this device — try the HQ server voice instead
+            if (st.hq && !hqFailed && window.SP && window.SP._sb) { speakRemote(text); return; }
+            u.lang = "bn-IN"; u.rate = 0.82; u.pitch = 1.0;   // let the OS try; may be silent
+            if (!bnMissingWarned && window.toast) { bnMissingWarned = true; toast("Tip: for Bangla voice, install a Bengali TTS voice in your phone's settings, or enable HQ voice.", true); }
+          }
         } else {
           var v = pickEn(); if (v) { u.voice = v; u.lang = v.lang; }
           u.rate = 0.76;
           u.pitch = st.gender === "him" ? 0.82 : 1.06;
         }
-        u.volume = 0.94;
+        u.volume = 0.98;
+        u.onend = function () { try { if (keepAlive && !speechSynthesis.speaking) { clearInterval(keepAlive); keepAlive = null; } } catch (e) {} };
         speechSynthesis.speak(u);
+        startKeepAlive();
       } catch (e) {}
     }
     // ── high-quality voice via the secure `tts` Edge Function (Google Cloud TTS).

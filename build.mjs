@@ -62,6 +62,7 @@ const JS = [
   "practice/library.js",
   "connect/soulloc.js",
   "connect/akash.js",
+  "connect/antor.js",
   "connect/extras.js",
   "oracle/oracle.js",
   "divine/divine.js",

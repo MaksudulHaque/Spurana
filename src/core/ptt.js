@@ -30,8 +30,13 @@
     } catch (e) {}
   }
 
+  function bubblePulse() {
+    try { var C = window.Capacitor; if (C && C.Plugins && C.Plugins.SoulBubble) C.Plugins.SoulBubble.pulse(); } catch (e) {}
+  }
   function onIncoming(m) {
-    if (!m || m.type !== "ptt" || m.uid === myId || m.deleted) return;
+    if (!m || m.uid === myId || m.deleted) return;
+    bubblePulse(); // her light stirs, whatever she sent
+    if (m.type !== "ptt") return;
     vibe([90, 60, 90, 60, 190]); // the PTT signature — unmistakable
     if (window.toast) toast("\uD83C\uDF99\uFE0F " + (m.name || partnerName) + " is speaking\u2026");
     if (m.url) playPath(m.url);

@@ -65,6 +65,18 @@ public class SoulBubblePlugin extends Plugin {
   }
 
   @PluginMethod
+  public void pulse(PluginCall call) {
+    ChatHeadService.pulse();
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void calm(PluginCall call) {
+    ChatHeadService.calm();
+    call.resolve();
+  }
+
+  @PluginMethod
   public void getLaunchRoute(PluginCall call) {
     JSObject r = new JSObject();
     String route = null;

@@ -226,3 +226,21 @@ select.input{-webkit-appearance:none;appearance:none}
 .akash-status{font-family:var(--f-ui);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim);min-height:16px}
 .akash-status.live{color:var(--q-bright)}
 .akash-status.try,.akash-status.flash{color:var(--gold-bright)}
+
+/* Antordrishti — the inner-sight stage */
+.antor-stage{position:relative;width:100%;height:calc(100vh - 56px);min-height:70vh;background:radial-gradient(120% 90% at 50% 0%,rgba(232,0,154,.12),transparent 60%),#060409;overflow:hidden;border-radius:0}
+.antor-remote{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#0a0610;opacity:0;transition:opacity .6s ease}
+.antor-stage.connected .antor-remote{opacity:1}
+.antor-local{position:absolute;right:14px;top:14px;width:104px;height:150px;object-fit:cover;border-radius:16px;border:1px solid var(--gold);box-shadow:0 6px 20px rgba(0,0,0,.55);background:#140a1a;z-index:3;transform:scaleX(-1)}
+.antor-presence{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:64px;color:var(--gold-bright);text-shadow:0 0 40px rgba(232,0,154,.5);opacity:.9;transition:opacity .5s ease;animation:antorBreathe 3.6s ease-in-out infinite;z-index:1}
+.antor-presence.on{opacity:0}
+.antor-stage.connected .antor-presence{opacity:0}
+@keyframes antorBreathe{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.7}50%{transform:translate(-50%,-50%) scale(1.14);opacity:1}}
+.antor-status{position:absolute;bottom:96px;left:0;right:0;text-align:center;font-family:var(--f-ui);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-dim);z-index:3;pointer-events:none;text-shadow:0 1px 8px #000}
+.antor-status.live{color:var(--q-bright)}
+.antor-status.wait{color:var(--gold)}
+.antor-controls{position:absolute;bottom:22px;left:0;right:0;display:flex;justify-content:center;gap:14px;z-index:4}
+.antor-ctl{width:56px;height:56px;border-radius:50%;border:1px solid var(--border);background:rgba(20,10,26,.72);backdrop-filter:blur(8px);color:var(--text);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s ease,background .2s ease}
+.antor-ctl:active{transform:scale(.9)}
+.antor-ctl.off{background:rgba(232,0,154,.28);border-color:var(--q)}
+.antor-ctl.end{background:rgba(220,40,60,.85);border:none;color:#fff}

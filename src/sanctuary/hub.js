@@ -40,6 +40,7 @@
       ["\u2726", "Souls", "your souls", () => Router.go("chat")],
       ["\uD83E\uDDED", "Track Souls", "live location", () => withConv(() => Router.go("track"))],
       ["\u26A1", "Akashvani", "emergency live voice", () => withConv(() => Router.go("akash"))],
+      ["\uD83D\uDC41\uFE0F", "Antordrishti", "live sight \u00b7 always on", () => withConv(() => Router.go("antor"))],
     ]],
     ["Journey Inward", [
       ["\uD83E\uDDD8", "Meditation Zone", "fully guided", () => Router.go("meditation")],

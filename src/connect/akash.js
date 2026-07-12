@@ -45,6 +45,7 @@
   async function onOffer(p) {
     if (!p || p.from === myId || !p.sdp) return;
     stopRx();
+    try { var Cx = window.Capacitor; if (Cx && Cx.Plugins && Cx.Plugins.SoulBubble) Cx.Plugins.SoulBubble.pulse(); } catch (e) {}
     vibe([300, 140, 300, 140, 650]); // the sky opens — emergency signature
     rxVibe = setInterval(function () { vibe([220, 120, 220]); }, 3200);
     if (window.toast) toast("\u26A1 AKASHVANI \u2014 " + (p.name || partnerName) + " is speaking LIVE");

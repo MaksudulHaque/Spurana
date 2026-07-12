@@ -42,6 +42,7 @@
 
   async function routeFromBubble() {
     var sb = SB(); if (!sb) return;
+    try { sb.calm(); } catch (e) {}
     try {
       var r = await sb.getLaunchRoute();
       if (r && r.route === "chat") { try { Router.go("chat"); } catch (e) {} }

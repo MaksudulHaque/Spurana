@@ -31,6 +31,10 @@
         id: "ptt", name: "Push-to-Talk", description: "Your soul is speaking",
         importance: 5, visibility: 1, vibration: true, lights: true, sound: "default",
       });
+      if (pn.createChannel) pn.createChannel({
+        id: "buzz", name: "Buzz", description: "A jolt from your soul",
+        importance: 5, visibility: 1, vibration: true, lights: true, sound: "default",
+      });
     } catch (e) {}
 
     try {

@@ -432,3 +432,68 @@ html[data-env] #dashBg,#dashBg{
 /* settings: clean grouped section cards */
 .set-card{background:linear-gradient(158deg,rgba(34,16,46,.5),rgba(12,7,18,.4));border:1px solid rgba(201,169,110,.16);border-radius:20px;padding:20px;margin-bottom:16px}
 .set-card .f-label{margin-bottom:12px}
+
+/* ════════ V4.2 · alignment + fit ════════ */
+/* Sanctuary grid: equal negative space both sides, nothing leaves screen */
+.s-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  padding:0 18px;           /* symmetric side margins */
+  width:100%;
+  box-sizing:border-box;
+  margin:0 auto;
+}
+.s-tile{
+  width:100%;
+  min-width:0;              /* never overflow the column */
+  box-sizing:border-box;
+  overflow:hidden;
+}
+.s-title-lead,.s-title-rom{
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  text-align:center;
+  padding:0 2px;
+  box-sizing:border-box;
+}
+.s-section{padding:0 18px}
+
+/* Sanctuary scroll container: symmetric, bottom breathing room */
+.sanctuary-scroll,#sanctuary .scroll{padding-bottom:calc(40px + var(--sab,0px))}
+
+/* Dashboard: fit hero to screen, start at top, no dead scroll */
+.dash-wrap{padding-top:max(20px,var(--sat,0px));padding-bottom:calc(40px + var(--sab,0px));scroll-padding-top:0}
+.dash-hero{padding-top:8px}
+
+/* ════════ Jhankar · the Buzz ════════ */
+@keyframes buzzShake{
+  0%,100%{transform:translate(0,0) rotate(0)}
+  10%{transform:translate(-9px,4px) rotate(-1.2deg)}
+  20%{transform:translate(8px,-6px) rotate(1deg)}
+  30%{transform:translate(-11px,-3px) rotate(-1.4deg)}
+  40%{transform:translate(10px,7px) rotate(1.3deg)}
+  50%{transform:translate(-7px,5px) rotate(-.8deg)}
+  60%{transform:translate(9px,-7px) rotate(1.1deg)}
+  70%{transform:translate(-10px,3px) rotate(-1.2deg)}
+  80%{transform:translate(7px,6px) rotate(.9deg)}
+  90%{transform:translate(-6px,-4px) rotate(-.7deg)}
+}
+.buzz-shake{animation:buzzShake .12s linear infinite}
+.buzz-strobe{position:fixed;inset:0;z-index:99998;pointer-events:none;animation:buzzStrobe .09s steps(1) infinite;mix-blend-mode:screen}
+@keyframes buzzStrobe{
+  0%{background:rgba(232,0,154,.55)}
+  25%{background:rgba(255,255,255,.5)}
+  50%{background:rgba(120,0,200,.5)}
+  75%{background:rgba(0,0,0,.4)}
+  100%{background:rgba(232,0,154,.55)}
+}
+.buzz-banner{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);z-index:99999;font-family:var(--f-sacred);font-size:26px;color:#fff;text-shadow:0 0 20px #E8009A,0 0 40px #E8009A;letter-spacing:.04em;white-space:nowrap;pointer-events:none;animation:buzzBanner 2.2s ease-out forwards}
+@keyframes buzzBanner{0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}30%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
+
+.buzz-title{font-family:var(--f-sacred);font-size:34px;background:linear-gradient(120deg,var(--gold-bright),var(--q-bright));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+.buzz-btn{width:150px;height:150px;border-radius:50%;border:2px solid var(--gold);font-size:60px;line-height:1;color:var(--gold-bright);cursor:pointer;background:radial-gradient(circle at 38% 30%,rgba(255,106,208,.5),rgba(16,8,24,.95) 62%);box-shadow:0 8px 34px rgba(232,0,154,.4);transition:transform .12s ease,box-shadow .2s ease}
+.buzz-btn:active{transform:scale(.9)}
+.buzz-btn.thrown{animation:buzzThrown .4s ease}
+@keyframes buzzThrown{0%,100%{transform:scale(1)}30%{transform:scale(1.3) rotate(-8deg);box-shadow:0 0 50px rgba(232,0,154,.8)}60%{transform:scale(1.1) rotate(6deg)}}

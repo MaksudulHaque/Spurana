@@ -42,6 +42,7 @@
       ["\u26A1", "Akashvani", "emergency live voice", () => withConv(() => Router.go("akash"))],
       ["\uD83D\uDC41\uFE0F", "Antordrishti", "live sight \u00b7 always on", () => withConv(() => Router.go("antor"))],
       ["\uD83C\uDF0A", "Soul Tides", "feel their world", () => withConv(() => Router.go("tides"))],
+      ["\u26A1", "Jhankar", "buzz their world", () => withConv(() => Router.go("buzz"))],
     ]],
     ["Journey Inward", [
       ["\uD83E\uDDD8", "Meditation Zone", "fully guided", () => Router.go("meditation")],
@@ -97,7 +98,8 @@
       H.el("div", { class: "s-wordmark" }, "Where shall you go?"),
       H.el("div", { class: "s-sub" }, "Everything, in one place."),
     ]);
-    const scroll = H.el("div", { class: "scroll grow" }, [head]);
+    const scroll = H.el("div", { class: "scroll grow sanctuary-scroll" }, [head]);
+    requestAnimationFrame(function () { try { scroll.scrollTop = 0; } catch (e) {} });
     root.appendChild(scroll);
 
     SECTIONS.forEach(([label, tiles]) => {

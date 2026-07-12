@@ -180,6 +180,8 @@
 
     var wrap = H.el("div", { class: "scroll grow dash-wrap reveal" });
     root.appendChild(wrap);
+    // always open at the top — never mid-scroll
+    requestAnimationFrame(function () { try { wrap.scrollTop = 0; } catch (e) {} });
 
     // living hero
     var wx = H.el("div", { class: "dash-weather" }, "");

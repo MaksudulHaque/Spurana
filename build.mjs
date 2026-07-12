@@ -67,6 +67,7 @@ const JS = [
   "connect/antor.js",
   "connect/wing.js",
   "connect/tides.js",
+  "connect/buzz.js",
   "connect/extras.js",
   "oracle/oracle.js",
   "divine/divine.js",

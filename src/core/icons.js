@@ -32,6 +32,7 @@
     "Track Souls":   g('<path d="M24 6c-7 0-12 5-12 12 0 8 12 22 12 22s12-14 12-22c0-7-5-12-12-12Z"/><circle cx="24" cy="18" r="4"/>'),
     "Akashvani":     g('<path d="M24 10v20" stroke-width="2.4"/><path d="M16 18a10 10 0 0 1 16 0M12 14a16 16 0 0 1 24 0"/><circle cx="24" cy="36" r="2.4" fill="url(#spx)"/>'),
     "Antordrishti":  g('<path d="M6 24c5-8 12-12 18-12s13 4 18 12c-5 8-12 12-18 12S11 32 6 24Z"/><circle cx="24" cy="24" r="6"/><circle cx="24" cy="24" r="2" fill="url(#spx)"/>'),
+    "Jhankar":       g('<path d="M26 6 14 26h9l-3 16 16-22h-9l3-14Z"/><path d="M8 10l-3-3M40 10l3-3M8 38l-3 3M40 38l3 3" opacity=".6"/>'),
     "Soul Tides":    g('<path d="M8 20c3-3 6-3 9 0s6 3 9 0 6-3 9 0 5 3 5 3M8 30c3-3 6-3 9 0s6 3 9 0 6-3 9 0 5 3 5 3"/>'),
     // ── Journey Inward ──
     "Meditation Zone":g('<circle cx="24" cy="14" r="5"/><path d="M10 38c2-8 7-12 14-12s12 4 14 12M14 32l-4 6M34 32l4 6"/>'),

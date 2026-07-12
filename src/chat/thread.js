@@ -164,7 +164,10 @@
         H.el("p", { class: "muted", style: "font-family:var(--f-soul);font-style:italic" }, "The beginning of your shared silence. Break it gently."),
       ]), typingRow);
       else data.forEach((m) => add(m, false));
-      scrollDown(true); markRead();
+      // ensure the newest message is in view — wait for the DOM to lay out first
+      requestAnimationFrame(function () { requestAnimationFrame(function () { scrollDown(true); }); });
+      setTimeout(function () { scrollDown(true); }, 120);
+      markRead();
     }
 
     SP.chat.join(convId, (m) => add(m, true), (m) => replaceRow(m));

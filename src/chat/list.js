@@ -49,7 +49,7 @@
       const nameById = {}; (profs.data || []).forEach((p) => { nameById[p.id] = p.name; });
       const convById = {}; (convs.data || []).forEach((c) => { convById[c.conv_id] = c; });
       rows.forEach((r) => {
-        r.name = r.name || nameById[r.puid] || "Your beloved";
+        r.name = r.name || nameById[r.puid] || "Your soul";
         const cm = convById[r.conv];
         r.preview = (cm && cm.last_msg_preview) || "Say the first word…";
         r.ts = (cm && cm.last_msg_ts) || 0;
@@ -90,7 +90,7 @@
     function errCard(m) { return H.el("div", { class: "pad" }, H.el("div", { class: "card center", style: "color:var(--bad)" }, m || "Could not load.")); }
 
     function openMenu() {
-      const who = ((APP.profile && APP.profile.name) || "A soul") + " · " + ((APP.me && APP.me.email) || "");
+      const who = ((APP.profile && APP.profile.name) || (APP.me && APP.me.name) || "You") + " · " + ((APP.me && APP.me.email) || "");
       const back = H.el("div", { style: "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9990" });
       const sheet = H.el("div", {
         class: "pad stack",

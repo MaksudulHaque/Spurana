@@ -118,6 +118,18 @@
         bioBtn.onclick = function () { if (!window.BioLock) return; BioLock.setEnabled(!BioLock.enabled()).then(bioLabel); };
         bioLabel();
         c.appendChild(bioBtn);
+
+        // ── Soul Bubble: floating chat head over every app ──
+        c.appendChild(H.el("div", { class: "zc-desc", style: "margin:16px 0 6px" }, "Soul Bubble \u2014 a floating \u2726 over every app; tap it to open your chat"));
+        var bubBtn = H.el("button", { class: "btn btn-ghost", style: "width:100%" }, "\u2026");
+        function bubLabel() {
+          if (!window.SoulBubbleJS || !SoulBubbleJS.available()) { bubBtn.textContent = "Native app only"; bubBtn.disabled = true; return; }
+          bubBtn.disabled = false;
+          bubBtn.textContent = SoulBubbleJS.enabled() ? "Bubble is floating \u2726 \u2014 tap to rest it" : "Release the bubble \u2726";
+        }
+        bubBtn.onclick = function () { if (!window.SoulBubbleJS) return; SoulBubbleJS.setEnabled(!SoulBubbleJS.enabled()).then(bubLabel); };
+        bubLabel();
+        c.appendChild(bubBtn);
       }
       body.appendChild(c);
     })();

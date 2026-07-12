@@ -70,6 +70,7 @@ const JS = [
   "core/native.js",
   "core/push.js",
   "core/biolock.js",
+  "core/bubble.js",
   "core/ptt.js",
   "core/boot.js",       // entry point — last
 ];

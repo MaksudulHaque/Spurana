@@ -51,13 +51,15 @@
     const jumpBadge = H.el("span", { class: "badge hidden" }, "0");
     const jump = H.el("button", { class: "jump", onClick: () => scrollDown(true) }, [H.el("span", null, "\u2193"), jumpBadge]);
     msgs.appendChild(typingRow);
+    const endAnchor = H.el("div", { class: "msgs-end", style: "height:1px" });
+    msgs.appendChild(endAnchor);
     root.append(msgs, jump);
 
     const seen = new Set(), byId = {}, ownTicks = [];
     let lastUid = null, lastTs = 0, partnerLastSeen = 0, partnerOnline = false, unreadWhileUp = 0;
 
     function atBottom() { return msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 90; }
-    function scrollDown(force) { if (force || atBottom()) { msgs.scrollTop = msgs.scrollHeight; unreadWhileUp = 0; jump.classList.remove("on"); jumpBadge.classList.add("hidden"); } }
+    function scrollDown(force) { if (force || atBottom()) { try { endAnchor.scrollIntoView({ block: "end" }); } catch (e) {} msgs.scrollTop = msgs.scrollHeight; unreadWhileUp = 0; jump.classList.remove("on"); jumpBadge.classList.add("hidden"); } }
     function cssId(id) { return (window.CSS && CSS.escape) ? CSS.escape(id) : String(id).replace(/"/g, '\\"'); }
 
     function tickEl(m) { const s = partnerLastSeen && m.ts <= partnerLastSeen; return H.el("span", { class: "tick" + (s ? " seen" : "") }, s ? "\u2713\u2713" : "\u2713"); }
@@ -164,9 +166,20 @@
         H.el("p", { class: "muted", style: "font-family:var(--f-soul);font-style:italic" }, "The beginning of your shared silence. Break it gently."),
       ]), typingRow);
       else data.forEach((m) => add(m, false));
-      // ensure the newest message is in view — wait for the DOM to lay out first
-      requestAnimationFrame(function () { requestAnimationFrame(function () { scrollDown(true); }); });
-      setTimeout(function () { scrollDown(true); }, 120);
+      // Land on the newest message — retry across paints because the WebView
+      // finalizes layout (and media) after the first frame.
+      function pin() { try { endAnchor.scrollIntoView({ block: "end" }); } catch (e) {} try { msgs.scrollTop = msgs.scrollHeight; } catch (e) {} }
+      pin();
+      requestAnimationFrame(function () { pin(); requestAnimationFrame(pin); });
+      [60, 140, 300, 600].forEach(function (t) { setTimeout(pin, t); });
+      // if any image/video finishes loading later, pin again
+      try {
+        var media = msgs.querySelectorAll("img, video");
+        media.forEach(function (el) {
+          el.addEventListener("load", pin, { once: true });
+          el.addEventListener("loadeddata", pin, { once: true });
+        });
+      } catch (e) {}
       markRead();
     }
 

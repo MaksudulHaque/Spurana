@@ -32,6 +32,19 @@
   (async function boot() {
     const root = document.getElementById("app");
 
+    // ABSOLUTE SAFETY: once the app has rendered anything, no boot veil may linger.
+    try {
+      var killBoot = setInterval(function () {
+        var bv = document.getElementById("bootVeil");
+        var appEl = document.getElementById("app");
+        if (appEl && appEl.children && appEl.children.length > 0) {
+          if (bv) { bv.classList.add("lift"); setTimeout(function () { try { bv.remove(); } catch (e) {} }, 900); }
+          clearInterval(killBoot);
+        }
+      }, 150);
+      setTimeout(function () { try { clearInterval(killBoot); var bv = document.getElementById("bootVeil"); if (bv) bv.remove(); } catch (e) {} }, 4000);
+    } catch (e) {}
+
     try { window.PERF.init(); } catch (e) {}
     try { if (window.TimeWorld) TimeWorld.init(); } catch (e) {}
     try { if (window.Weather) Weather.init(); } catch (e) {}

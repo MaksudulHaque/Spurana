@@ -31,9 +31,14 @@
 
   function showVeil() {
     if (shown || !enabled) return;
-    // don't cover full-screen live experiences
+    // don't cover full-screen live experiences OR the login/auth screens
     var h = (location.hash || "");
-    if (/antor|akash|watch|listen/.test(h)) return;
+    if (/antor|akash|watch|listen|login|signup|awaken/.test(h)) return;
+    // never show if the app hasn't actually rendered yet
+    var app = document.getElementById("app");
+    if (!app || !app.children || !app.children.length) return;
+    // never show if the user isn't logged in
+    if (!(window.APP && APP.me)) return;
     shown = true;
     build().classList.add("on");
   }

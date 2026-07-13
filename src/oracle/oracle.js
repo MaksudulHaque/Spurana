@@ -60,7 +60,7 @@
     const body = H.el("div", { class: "pad scroll grow stack reveal", style: "align-items:center;text-align:center" });
     root.appendChild(body);
     body.appendChild(window.sigil ? window.sigil() : H.el("div", null, "\u2726"));
-    body.appendChild(H.el("div", { class: "s-wordmark", style: "margin-top:10px" }, "Spurana"));
+    body.appendChild(H.el("div", { class: "s-wordmark", style: "margin:10px auto 0;display:block;width:100%;text-align:center" }, "Spurana"));
     body.appendChild(H.el("p", { style: "font-family:var(--f-soul);font-style:italic;font-size:18px;color:var(--text-dim);max-width:340px" }, "A sacred space to talk with your soul \u2014 and the one you love. Built not as a product, but as a vow: that two people, however far apart, can always find their way back to one another."));
     body.appendChild(H.el("div", { class: "card", style: "max-width:380px" }, [
       H.el("div", { class: "f-label" }, "Dedication"),

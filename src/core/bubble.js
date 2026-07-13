@@ -45,7 +45,13 @@
     try { sb.calm(); } catch (e) {}
     try {
       var r = await sb.getLaunchRoute();
-      if (r && r.route === "chat") { try { Router.go("chat"); } catch (e) {} }
+      if (r && r.route) {
+        var route = r.route;
+        if (route === "chat") { try { Router.go("chat"); } catch (e) {} }
+        else if (route === "buzz") { try { Router.go("buzz"); } catch (e) {} }
+        else if (route === "akash") { try { Router.go("akash"); } catch (e) {} }
+        else if (route === "antor") { try { Router.go("antor"); } catch (e) {} }
+      }
     } catch (e) {}
   }
 

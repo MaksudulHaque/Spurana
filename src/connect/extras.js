@@ -53,27 +53,101 @@
 
     const ta = H.el("textarea", { class: "input", rows: "3", placeholder: "Words for a future day\u2026", style: "resize:none" });
     const when = H.el("input", { class: "input", type: "date" });
+
+    // ── audio / video echo capture ──
+    let mediaBlob = null, mediaKind = null, rec = null, stream = null, recording = false;
+    const mediaPreview = H.el("div", { class: "echo-media", style: "display:none" });
+    const recRow = H.el("div", { class: "row", style: "gap:8px" });
+    const aBtn = H.el("button", { class: "btn btn-ghost", style: "flex:1" }, "\uD83C\uDF99 Voice echo");
+    const vBtn = H.el("button", { class: "btn btn-ghost", style: "flex:1" }, "\uD83D\uDCF9 Video echo");
+    recRow.append(aBtn, vBtn);
+
+    async function startRec(kind) {
+      if (recording) { stopRec(); return; }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(kind === "video" ? { audio: true, video: { facingMode: "user" } } : { audio: true });
+      } catch (e) { toast("Permission needed for " + kind + ".", true); return; }
+      mediaKind = kind; recording = true;
+      var mime = kind === "video"
+        ? (MediaRecorder.isTypeSupported("video/webm") ? "video/webm" : "")
+        : (MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "");
+      var chunks = [];
+      rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = function () {
+        try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+        mediaBlob = new Blob(chunks, { type: (rec && rec.mimeType) || (kind === "video" ? "video/webm" : "audio/webm") });
+        recording = false;
+        (kind === "video" ? vBtn : aBtn).textContent = (kind === "video" ? "\uD83D\uDCF9 Video echo" : "\uD83C\uDF99 Voice echo");
+        (kind === "video" ? aBtn : vBtn).textContent = (kind === "video" ? "\uD83C\uDF99 Voice echo" : "\uD83D\uDCF9 Video echo");
+        // preview
+        mediaPreview.innerHTML = ""; mediaPreview.style.display = "block";
+        var url = URL.createObjectURL(mediaBlob);
+        var el = kind === "video" ? H.el("video", { src: url, controls: "", playsinline: "", style: "width:100%;border-radius:14px;max-height:220px" })
+                                  : H.el("audio", { src: url, controls: "", style: "width:100%" });
+        mediaPreview.appendChild(el);
+        mediaPreview.appendChild(H.el("div", { class: "zc-desc", style: "margin-top:4px" }, "\u2713 " + kind + " echo ready to seal"));
+      };
+      rec.start();
+      (kind === "video" ? vBtn : aBtn).textContent = "\u25A0 Stop recording";
+    }
+    function stopRec() { try { if (rec) rec.stop(); } catch (e) {} }
+    aBtn.onclick = function () { startRec("audio"); };
+    vBtn.onclick = function () { startRec("video"); };
+
     const sendBtn = H.el("button", { class: "btn btn-primary btn-block", onClick: release }, "Release to the future \u2726");
-    body.appendChild(H.el("div", { class: "card stack" }, [ta, when, sendBtn]));
+    body.appendChild(H.el("div", { class: "card stack" }, [ta, recRow, mediaPreview, when, sendBtn]));
     const listEl = H.el("div", { class: "stack" }); body.appendChild(listEl);
 
     function parse(m) { try { return JSON.parse(m.text); } catch (e) { return { b: m.text || "", r: 0 }; } }
     function card(m) {
       const o = parse(m); const due = Number(o.r) || 0; const ready = due <= Date.now();
       const days = Math.ceil((due - Date.now()) / 86400000);
-      return H.el("div", { class: "card" }, ready
-        ? [H.el("div", { style: "font-family:var(--f-soul);font-size:18px;color:#eaccff" }, o.b),
-           H.el("div", { class: "zc-desc", style: "margin-top:6px" }, "echoed back \u00b7 " + new Date(due).toLocaleDateString())]
-        : [H.el("div", { class: "row spread" }, [H.el("div", { class: "zc-title", style: "font-size:15px" }, "\uD83D\uDD12 A sealed echo"), H.el("div", { class: "day-count" }, "in " + days + "d")]),
-           H.el("div", { class: "zc-desc" }, "returns " + new Date(due).toLocaleDateString())]);
+      if (ready) {
+        var kids = [];
+        if (o.b) kids.push(H.el("div", { style: "font-family:var(--f-soul);font-size:18px;color:#eaccff" }, o.b));
+        if (o.media && o.kind) {
+          // resolve the stored media path to a playable url
+          var holder = H.el("div", { style: "margin-top:8px" }, "\u2026");
+          SP.media.signedUrl(o.media, 3600).then(function (r) {
+            holder.innerHTML = "";
+            if (r && r.data) {
+              var el = o.kind === "video" ? H.el("video", { src: r.data, controls: "", playsinline: "", style: "width:100%;border-radius:14px;max-height:260px" })
+                                          : H.el("audio", { src: r.data, controls: "", style: "width:100%" });
+              holder.appendChild(el);
+            }
+          });
+          kids.push(holder);
+        }
+        kids.push(H.el("div", { class: "zc-desc", style: "margin-top:6px" }, "echoed back \u00b7 " + new Date(due).toLocaleDateString()));
+        return H.el("div", { class: "card" }, kids);
+      }
+      var label = o.kind === "video" ? "\uD83D\uDD12 A sealed video echo" : o.kind === "audio" ? "\uD83D\uDD12 A sealed voice echo" : "\uD83D\uDD12 A sealed echo";
+      return H.el("div", { class: "card" }, [
+        H.el("div", { class: "row spread" }, [H.el("div", { class: "zc-title", style: "font-size:15px" }, label), H.el("div", { class: "day-count" }, "in " + days + "d")]),
+        H.el("div", { class: "zc-desc" }, "returns " + new Date(due).toLocaleDateString())]);
     }
     function sortItems(items) { return items.slice().sort((a, b) => (parse(a).r || 0) - (parse(b).r || 0)); }
     function render(items) { H.clear(listEl); sortItems(items).forEach((m) => listEl.appendChild(card(m))); }
     async function release() {
-      const b = ta.value.trim(); if (!b) { toast("Write your echo."); return; } if (!when.value) { toast("Choose a return date."); return; }
+      const b = ta.value.trim();
+      if (!b && !mediaBlob) { toast("Write or record your echo."); return; }
+      if (!when.value) { toast("Choose a return date."); return; }
       const r = new Date(when.value + "T09:00:00").getTime();
-      const m = await Keepsake.add(conv, "echo", { text: JSON.stringify({ b: b, r: r }) });
-      if (m) { ta.value = ""; when.value = ""; render(await Keepsake.list(conv, "echo")); toast("Sealed \u2726"); } else toast("Couldn't seal.", true);
+      let mediaPath = null;
+      if (mediaBlob) {
+        toast("Sealing your " + mediaKind + " echo\u2026");
+        try {
+          var fname = "echo." + (mediaKind === "video" ? "webm" : "webm");
+          var file = window.File ? new File([mediaBlob], fname, { type: mediaBlob.type }) : mediaBlob;
+          var up = await SP.media.upload(conv, file);
+          if (up && up.data && up.data.path) mediaPath = up.data.path;
+        } catch (e) { toast("Media upload failed.", true); return; }
+      }
+      const payload = { b: b, r: r };
+      if (mediaPath) { payload.media = mediaPath; payload.kind = mediaKind; }
+      const m = await Keepsake.add(conv, "echo", { text: JSON.stringify(payload) });
+      if (m) { ta.value = ""; when.value = ""; mediaBlob = null; mediaKind = null; mediaPreview.style.display = "none"; mediaPreview.innerHTML = ""; render(await Keepsake.list(conv, "echo")); toast("Sealed \u2726"); } else toast("Couldn't seal.", true);
     }
     let ch = null;
     (async () => { render(await Keepsake.list(conv, "echo")); ch = Keepsake.subscribe(conv, "echo", async () => render(await Keepsake.list(conv, "echo"))); })();

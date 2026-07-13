@@ -88,7 +88,7 @@
       H.el("div", { class: "brand-name" }, CFG.APP_NAME),
       H.el("div", { class: "brand-soul" }, CFG.TAGLINE),
       H.el("div", { class: "soul-card" }, [H.el("div", { class: "soul-tabs" }, [tabIn, tabReg]), H.el("div", null, form)]),
-      H.el("div", { class: "nwp-credit" }, "NWP \u00b7 Sacred Architecture \u00b7 v6 \u00b7 2026"),
+      H.el("div", { class: "nwp-credit" }, [H.el("span", { class: "bn nwp-bn" }, "\u09b8\u09cd\u09ab\u09c1\u09b0\u09a3"), H.el("span", null, " \u00b7 Sacred Architecture \u00b7 2026")]),
       H.el("div", { class: "invite-hint", style: "margin-top:6px" }, [H.el("em", { onClick: function () { Router.go("privacy"); } }, "Privacy & Consent")]),
     ]);
     root.appendChild(H.el("div", { class: "awaken-screen" }, wrap));

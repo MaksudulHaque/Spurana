@@ -56,20 +56,42 @@
       });
       rows.sort((a, b) => (b.ts || 0) - (a.ts || 0));
 
+      // one bonded soul → the full-screen lumen spirit
+      if (rows.length === 1 && window.Souls) { H.clear(list); list.appendChild(soulFull(rows[0])); return; }
+
       H.clear(list);
       rows.forEach((r) => list.appendChild(convItem(r)));
     }
 
+    function soulFull(r) {
+      var sign = window.Souls ? Souls.signFor(r.puid) : "leo";
+      var Sign = sign.charAt(0).toUpperCase() + sign.slice(1);
+      var sig = H.el("div", { class: "soul-full-sigil" });
+      if (window.Souls) sig.innerHTML = Souls.sign(sign, 230);
+      return H.el("button", { class: "soul-full", onClick: function () {
+        APP.activeConv = r.conv; APP.partner = { uid: r.puid, name: r.name };
+        Router.go("thread", { c: r.conv });
+      } }, [
+        H.el("div", { class: "soul-full-rings" }, [H.el("div", { class: "sfr r1" }), H.el("div", { class: "sfr r2" }), H.el("div", { class: "sfr r3" })]),
+        sig,
+        H.el("div", { class: "soul-full-name" }, r.name),
+        H.el("div", { class: "soul-full-sign" }, Sign + " spirit"),
+        H.el("div", { class: "soul-full-hint" }, "touch to enter their world"),
+      ]);
+    }
+
     function convItem(r) {
-      return H.el("button", { class: "conv-item", onClick: () => {
+      var sign = (window.Souls) ? Souls.signFor(r.puid) : null;
+      var spiritLine = sign ? (sign.charAt(0).toUpperCase() + sign.slice(1) + " spirit") : r.preview;
+      return H.el("button", { class: "conv-item soul-item", onClick: () => {
         APP.activeConv = r.conv;
         APP.partner = { uid: r.puid, name: r.name };
         Router.go("thread", { c: r.conv });
       } }, [
-        (function(){ var a=H.el("div",{class:"avatar avatar-sigil"}); if(window.Souls) a.innerHTML=Souls.sign(Souls.signFor(r.puid),34); else a.textContent=H.initials(r.name); return a; })(),
+        (function(){ var a=H.el("div",{class:"avatar avatar-sigil soul-avatar"}); if(window.Souls) a.innerHTML=Souls.sign(Souls.signFor(r.puid),46); else a.textContent=H.initials(r.name); return a; })(),
         H.el("div", { class: "meta" }, [
-          H.el("div", { class: "nm" }, r.name),
-          H.el("div", { class: "pv" }, r.preview),
+          H.el("div", { class: "nm soul-nm" }, r.name),
+          H.el("div", { class: "pv soul-spirit" }, spiritLine),
         ]),
       ]);
     }

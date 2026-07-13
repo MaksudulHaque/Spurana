@@ -106,6 +106,79 @@
     return byId(id) || E[0];
   }
 
+  /* ── weather particles: the sky made visible (rain / storm / mist) ── */
+  var WXFX = (function () {
+    var cv = null, ctx = null, raf = 0, mode = "none", drops = [], flashAt = 0, W = 0, Hh = 0, DPR = 1;
+    function ensure() {
+      if (cv || !document.body) return;
+      cv = document.createElement("canvas"); cv.id = "wxFx";
+      document.body.appendChild(cv); ctx = cv.getContext("2d");
+      resize(); window.addEventListener("resize", resize);
+    }
+    function resize() {
+      if (!cv) return;
+      DPR = Math.min(2, window.devicePixelRatio || 1);
+      W = cv.width = innerWidth * DPR; Hh = cv.height = innerHeight * DPR;
+      cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+    }
+    function seed(n, fast) {
+      drops = [];
+      for (var i = 0; i < n; i++) drops.push({
+        x: Math.random() * W, y: Math.random() * Hh,
+        l: (9 + Math.random() * 15) * DPR,
+        v: (fast ? (11 + Math.random() * 7) : (6 + Math.random() * 4)) * DPR,
+        o: 0.22 + Math.random() * 0.34, w: Math.random() < 0.5 ? 1 : 1.4,
+      });
+    }
+    function loop() {
+      raf = requestAnimationFrame(loop);
+      ctx.clearRect(0, 0, W, Hh);
+      if (mode === "mist") {
+        var t = Date.now() / 9000;
+        for (var i = 0; i < 3; i++) {
+          var y = Hh * (0.25 + 0.25 * i) + Math.sin(t + i * 2.1) * 30 * DPR;
+          var g = ctx.createLinearGradient(0, y - 90 * DPR, 0, y + 90 * DPR);
+          g.addColorStop(0, "rgba(180,200,220,0)");
+          g.addColorStop(0.5, "rgba(180,200,220," + (0.05 + 0.02 * i) + ")");
+          g.addColorStop(1, "rgba(180,200,220,0)");
+          ctx.fillStyle = g; ctx.fillRect(0, y - 90 * DPR, W, 180 * DPR);
+        }
+        return;
+      }
+      ctx.strokeStyle = "rgba(160,210,255,.55)"; ctx.lineCap = "round";
+      for (var j = 0; j < drops.length; j++) {
+        var d = drops[j];
+        ctx.globalAlpha = d.o; ctx.lineWidth = d.w * DPR;
+        ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.v * 0.35, d.y + d.l); ctx.stroke();
+        d.y += d.v; d.x -= d.v * 0.12;
+        if (d.y > Hh) { d.y = -20 * DPR; d.x = Math.random() * W * 1.1; }
+      }
+      ctx.globalAlpha = 1;
+      if (mode === "storm") {
+        var now = Date.now();
+        if (now > flashAt && Math.random() < 0.008) {
+          ctx.fillStyle = "rgba(220,230,255,.35)"; ctx.fillRect(0, 0, W, Hh);
+          flashAt = now + 900;
+        }
+      }
+    }
+    function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; if (ctx) ctx.clearRect(0, 0, W, Hh); }
+    function sync(env) {
+      try {
+        if (document.documentElement.getAttribute("data-perf") === "lite") { stop(); mode = "none"; if (cv) cv.style.display = "none"; return; }
+        var m = (env && env.wx) || "none";
+        if (m === mode && raf) return;
+        mode = m;
+        if (m === "rain" || m === "storm" || m === "mist") {
+          ensure(); cv.style.display = "block";
+          if (m !== "mist") seed(m === "storm" ? 150 : 90, m === "storm");
+          if (!raf) loop();
+        } else { stop(); if (cv) cv.style.display = "none"; }
+      } catch (e) {}
+    }
+    return { sync: sync };
+  })();
+
   /* ── the painted world: css vars + dual-layer crossfade ── */
   function ensureLayers() {
     if (layers || !document.body) return;
@@ -128,6 +201,7 @@
       r.style.setProperty("--env-g2", env.g2);
       r.setAttribute("data-env", env.id);
     } catch (e) {}
+    try { WXFX.sync(env); } catch (e) {}
     ensureLayers();
     if (layers) {
       var g = "radial-gradient(120% 85% at 50% 0%," + env.g1 + ",transparent 58%)," +
@@ -219,35 +293,37 @@
     };
   })();
 
-  /* ── boot veil: the V1 SPURANA logo, layered color by timezone ── */
+  /* ── boot veil: the REAL animated Spurana sigil logo, guaranteed to lift ── */
   (function () {
     if (!document.body) return;
     try {
-      // resolve the current env's palette so the logo wears the hour's colors
-      var env = (window.Env && Env.current && Env.current()) || null;
-      var c1 = (env && env.qb) || "#E8009A";
-      var c2 = (env && env.goldb) || "#E2C28A";
-      var c3 = (env && env.q) || "#B0009A";
       var v = document.createElement("div");
       v.id = "bootVeil";
-      // layered wordmark: three offset color strata (the V1 signature)
-      var word = '<div class="bv-logo">' +
-          '<span class="bv-layer l1" style="color:' + c3 + '">SPURANA</span>' +
-          '<span class="bv-layer l2" style="color:' + c2 + '">SPURANA</span>' +
-          '<span class="bv-layer l3" style="background:linear-gradient(115deg,' + c2 + ',' + c1 + ' 60%,' + c3 + ');-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent">SPURANA</span>' +
-        '</div>';
-      v.innerHTML = word + '<div class="bv-sub">Spuran \u00b7 a sacred space for two souls</div>';
+      // the same living sigil + SPURANA from the awakening screen
+      var inner = document.createElement("div");
+      inner.className = "boot-logo-wrap";
+      try { if (window.sigil) inner.appendChild(window.sigil()); } catch (e) {}
+      var nm = document.createElement("div"); nm.className = "brand-name"; nm.textContent = "SPURANA";
+      var sub = document.createElement("div"); sub.className = "brand-soul"; sub.textContent = "A Sacred Space to Talk With Your Soul";
+      inner.appendChild(nm); inner.appendChild(sub);
+      v.appendChild(inner);
       document.body.appendChild(v);
       var gone = false;
       function lift() {
         if (gone) return; gone = true;
-        v.classList.add("lift");
-        setTimeout(function () { try { v.remove(); } catch (e) {} }, 1000);
+        try { v.classList.add("lift"); } catch (e) {}
+        setTimeout(function () { try { v.remove(); } catch (e) {} }, 900);
       }
       window.addEventListener("hashchange", lift, { once: true });
-      setTimeout(lift, 2600);
-    } catch (e) {}
-  })();
+      var polls = 0;
+      var pv = setInterval(function () {
+        polls++;
+        var app = document.getElementById("app");
+        if ((app && app.children && app.children.length > 0) || polls > 30) { clearInterval(pv); setTimeout(lift, 300); }
+      }, 100);
+      setTimeout(lift, 2000);
+    } catch (e) { try { var b = document.getElementById("bootVeil"); if (b) b.remove(); } catch (e2) {} }
+  })();;
 
   /* ── ignition ── */
   try {

@@ -90,6 +90,8 @@
     if (ch || !conv || !SP._sb) return;
     ch = SP._sb.channel("buzz:" + conv, { config: { broadcast: { self: false } } })
       .on("broadcast", { event: "buzz" }, function (m) { if (m.payload && m.payload.from !== myId) unleash(); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: "conv_id=eq." + conv },
+        function (pl) { var n = pl && pl.new; if (n && n.type === "buzz" && n.uid !== myId) unleash(); })
       .subscribe();
   }
 

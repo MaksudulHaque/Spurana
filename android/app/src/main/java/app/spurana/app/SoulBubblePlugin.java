@@ -90,4 +90,15 @@ public class SoulBubblePlugin extends Plugin {
     r.put("route", route == null ? "" : route);
     call.resolve(r);
   }
+
+  @PluginMethod
+  public void openAppSettings(PluginCall call) {
+    try {
+      android.content.Intent i = new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+      i.setData(android.net.Uri.parse("package:" + getContext().getPackageName()));
+      i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+      getContext().startActivity(i);
+    } catch (Exception e) {}
+    call.resolve();
+  }
 }

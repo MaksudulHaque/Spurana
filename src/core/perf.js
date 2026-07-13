@@ -27,6 +27,10 @@
       const mem = navigator.deviceMemory || 4;
       const cores = navigator.hardwareConcurrency || 4;
       if (mem <= 3 || cores <= 2) return "lite";
+      // budget Android (MIUI/Redmi/Realme etc) — Mali-class GPUs choke on blur+blend
+      const ua = navigator.userAgent || "";
+      if (/Redmi|MIUI|Xiaomi|POCO/i.test(ua)) return "lite";
+      if (/Android [89]|Android 1[012]/i.test(ua) && mem <= 4) return "lite";
     } catch (e) {}
     return "balanced"; // safe, cool default; High is opt-in.
   }
@@ -70,6 +74,25 @@
 
     body.appendChild(H.el("p", { class: "muted center", style: "font-family:var(--f-soul);font-style:italic;font-size:15px" },
       "Tune the sanctuary to your device. Lite keeps it coolest and fastest for messaging."));
+
+    // ── Xiaomi / MIUI keep-alive (Redmi phones kill background apps by default) ──
+    (function () {
+      var ua = navigator.userAgent || "";
+      var isXiaomi = /Redmi|MIUI|Xiaomi|POCO/i.test(ua);
+      var c = H.el("div", { class: "card stack set-card", style: "gap:10px" + (isXiaomi ? ";border-color:var(--gold)" : "") });
+      c.appendChild(H.el("div", { class: "f-label" }, (isXiaomi ? "\u26A1 " : "") + "Keep Spurana alive (Xiaomi / Redmi)"));
+      c.appendChild(H.el("div", { class: "zc-desc" },
+        "MIUI silently kills background apps \u2014 which stops buzzes, pushes and the Soul Bubble. Once, do these three things: 1) Autostart: ON. 2) Battery saver \u2192 No restrictions. 3) In Recents, hold the Spurana card \u2192 tap the \uD83D\uDD12 to lock it."));
+      var b = H.el("button", { class: "btn btn-primary", style: "width:100%" }, "Open Spurana's system settings");
+      b.onclick = function () {
+        var C = window.Capacitor;
+        var sb = C && C.Plugins && C.Plugins.SoulBubble;
+        if (sb && sb.openAppSettings) sb.openAppSettings();
+        else if (window.toast) toast("Open phone Settings \u2192 Apps \u2192 Spurana");
+      };
+      c.appendChild(b);
+      body.appendChild(c);
+    })();
 
     function card(t) {
       const on = PERF.tier === t.key;
